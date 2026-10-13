@@ -234,12 +234,21 @@ export const StudioAuthModal: React.FC<StudioAuthModalProps> = ({
   };
 
   // Handle Master Owner Login strictly with hardcoded credentials
-  const handleOwnerLogin = (e: React.FormEvent) => {
+  const handleOwnerLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
 
     if (verifyMasterOwner(ownerUsername, ownerPassword)) {
+      // Master needs a real Firebase identity so Firestore rules can allow
+      // cloud deletes across ALL studios (the password check is client-side only).
+      try {
+        await signInWithGooglePopup();
+      } catch (err) {
+        console.warn('Master Google sign-in skipped/failed:', err);
+        setErrorMessage('Google sign-in cancelled. Cloud delete work aaga Master Google sign-in venum - thirumba try pannunga.');
+        return;
+      }
       onOwnerLoginSuccess({
         isOwner: true,
         username: ownerUsername,
