@@ -1034,10 +1034,27 @@ export async function deleteStudio(studioId: string, authorized = true): Promise
 
   // 1. Delete from Firestore FIRST (studio doc + ALL its anime docs) so other
   //    users stop seeing it. Errors are surfaced instead of being swallowed.
+  if (!auth.currentUser) {
+    throw new Error('Cloud delete-ku Google sign-in venum. Master/Studio login-la Google sign-in pannitu thirumba try pannunga.');
+  }
   try {
-    const animeSnap = await getDocs(query(collection(db, 'anime'), where('studioId', '==', studioId)));
+    const studioName = memoryStudiosCache.find((s) => s.id === studioId)?.name;
+    const queries = [getDocs(query(collection(db, 'anime'), where('studioId', '==', studioId)))];
+    if (studioName) {
+      // also catch anime that only match by studio name
+      queries.push(getDocs(query(collection(db, 'anime'), where('studioName', '==', studioName))));
+    }
+    const snaps = await Promise.all(queries);
     const batch = writeBatch(db);
-    animeSnap.forEach((d) => batch.delete(d.ref));
+    const seen = new Set<string>();
+    snaps.forEach((snap) =>
+      snap.forEach((d) => {
+        if (!seen.has(d.id)) {
+          seen.add(d.id);
+          batch.delete(d.ref);
+        }
+      })
+    );
     batch.delete(doc(db, 'studios', studioId));
     await batch.commit();
   } catch (err: any) {
