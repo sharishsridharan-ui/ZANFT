@@ -9,7 +9,8 @@ import {
   deleteDoc,
   query,
   onSnapshot,
-  where
+  where,
+  writeBatch
 } from 'firebase/firestore';
 import { signInWithPopup, onAuthStateChanged } from 'firebase/auth';
 import { db, auth, googleProvider, MAX_STUDIO_CAPACITY, MASTER_OWNER_CREDENTIALS, getGoogleDriveStreamInfo } from '../firebase';
@@ -232,8 +233,30 @@ function syncCachesToStorage() {
   }
 }
 
+// Studio ids this browser/user legitimately owns (used so stale local copies
+// of OTHER people's studios never get re-uploaded or kept after a remote delete).
+function getOwnedStudioIds(): Set<string> {
+  const ids = new Set<string>();
+  try {
+    const raw = localStorage.getItem('zanft_current_studio') || localStorage.getItem('zanft_studio_session');
+    if (raw) {
+      const sess = JSON.parse(raw);
+      if (sess?.studioId) ids.add(sess.studioId);
+      if (sess?.id) ids.add(sess.id);
+    }
+  } catch {}
+  const uid = auth.currentUser?.uid;
+  if (uid) {
+    memoryStudiosCache.forEach((s) => {
+      if (s.googleUid && s.googleUid === uid) ids.add(s.id);
+    });
+  }
+  return ids;
+}
+
 // -------------------------------------------------------------
 // REAL-TIME SUBSCRIPTIONS
+
 // -------------------------------------------------------------
 
 // Subscribe to real-time anime list
@@ -256,7 +279,7 @@ export function subscribeToAnime(
     unsubFirestore = onSnapshot(
       animeCol,
       (snapshot) => {
-        if (!snapshot.empty) {
+        {
           const remoteList: CloudAnime[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
@@ -281,6 +304,19 @@ export function subscribeToAnime(
               topTenRank: data.topTenRank
             });
           });
+
+          // Remove anime deleted remotely (and stale local ghosts) from the cache
+          const remoteAnimeIds = new Set(remoteList.map((r) => r.id));
+          snapshot.docChanges().forEach((ch) => {
+            if (ch.type === 'removed') {
+              const i = memoryAnimeCache.findIndex((a) => a.id === ch.doc.id);
+              if (i !== -1) memoryAnimeCache.splice(i, 1);
+            }
+          });
+          if (!snapshot.metadata.fromCache) {
+            const owned = getOwnedStudioIds();
+            memoryAnimeCache = memoryAnimeCache.filter((a) => remoteAnimeIds.has(a.id) || owned.has(a.studioId));
+          }
 
           // Merge with local cache
           remoteList.forEach((ra) => {
@@ -332,7 +368,20 @@ export function subscribeToStudios(
     unsubFirestore = onSnapshot(
       studiosCol,
       (snapshot) => {
-        if (!snapshot.empty) {
+        {
+          // Remove studios deleted remotely (and stale local ghosts) from the cache
+          snapshot.docChanges().forEach((ch) => {
+            if (ch.type === 'removed') {
+              const i = memoryStudiosCache.findIndex((s) => s.id === ch.doc.id);
+              if (i !== -1) memoryStudiosCache.splice(i, 1);
+            }
+          });
+          if (!snapshot.metadata.fromCache) {
+            const remoteStudioIds = new Set(snapshot.docs.map((d) => d.id));
+            const owned = getOwnedStudioIds();
+            memoryStudiosCache = memoryStudiosCache.filter((s) => remoteStudioIds.has(s.id) || owned.has(s.id));
+          }
+
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             const existingIdx = memoryStudiosCache.findIndex((s) => s.id === docSnap.id || s.name.toLowerCase() === (data.name || '').toLowerCase());
@@ -859,6 +908,18 @@ export async function deleteAnimeFolder(
     throw new Error('Permission denied: You can only delete anime folders belonging to your studio.');
   }
 
+  // Delete from Firestore first so other users stop seeing it; surface errors.
+  try {
+    await deleteDoc(doc(db, 'anime', animeId));
+  } catch (err: any) {
+    console.error('Firestore anime delete failed:', err);
+    throw new Error(
+      err?.code === 'permission-denied'
+        ? 'Cloud delete blocked by Firestore rules - sign in with Google and try again.'
+        : 'Cloud delete failed. Check internet and try again.'
+    );
+  }
+
   memoryAnimeCache.splice(animeIdx, 1);
 
   // Decrement studio count
@@ -869,12 +930,6 @@ export async function deleteAnimeFolder(
 
   syncCachesToStorage();
   notifyDataChanged();
-
-  // Non-blocking Firestore sync
-  try {
-    const animeDocRef = doc(db, 'anime', animeId);
-    deleteDoc(animeDocRef).catch(() => {});
-  } catch {}
 }
 
 export async function addEpisodeToAnime(
@@ -977,22 +1032,32 @@ export async function deleteStudio(studioId: string, authorized = true): Promise
     throw new Error('Authorized credentials required to delete studio.');
   }
 
+  // 1. Delete from Firestore FIRST (studio doc + ALL its anime docs) so other
+  //    users stop seeing it. Errors are surfaced instead of being swallowed.
+  try {
+    const animeSnap = await getDocs(query(collection(db, 'anime'), where('studioId', '==', studioId)));
+    const batch = writeBatch(db);
+    animeSnap.forEach((d) => batch.delete(d.ref));
+    batch.delete(doc(db, 'studios', studioId));
+    await batch.commit();
+  } catch (err: any) {
+    console.error('Firestore studio delete failed:', err);
+    throw new Error(
+      err?.code === 'permission-denied'
+        ? 'Cloud delete blocked by Firestore rules - sign in with Google and check rules, then try again.'
+        : 'Cloud delete failed. Check internet and try again.'
+    );
+  }
+
+  // 2. Then clear local caches
   const studioIdx = memoryStudiosCache.findIndex((s) => s.id === studioId);
   if (studioIdx !== -1) {
     memoryStudiosCache.splice(studioIdx, 1);
   }
-
-  // Also remove anime from this studio
   memoryAnimeCache = memoryAnimeCache.filter((a) => a.studioId !== studioId);
 
   syncCachesToStorage();
   notifyDataChanged();
-
-  // Non-blocking Firestore sync
-  try {
-    const studioDocRef = doc(db, 'studios', studioId);
-    deleteDoc(studioDocRef).catch(() => {});
-  } catch {}
 }
 
 /**
@@ -1021,13 +1086,16 @@ export async function syncLocalToFirestore(): Promise<void> {
     const remoteStudioIds = new Set(studioSnap.docs.map((d) => d.id));
     const remoteAnimeIds = new Set(animeSnap.docs.map((d) => d.id));
 
+    // Only upload what THIS user owns - otherwise stale local copies of studios
+    // deleted by someone else would be re-created ("zombie studios").
+    const owned = getOwnedStudioIds();
     for (const studio of memoryStudiosCache) {
-      if (!remoteStudioIds.has(studio.id)) {
+      if (!remoteStudioIds.has(studio.id) && owned.has(studio.id)) {
         await setDoc(doc(db, 'studios', studio.id), toPublicStudio(studio));
       }
     }
     for (const anime of memoryAnimeCache) {
-      if (!remoteAnimeIds.has(anime.id)) {
+      if (!remoteAnimeIds.has(anime.id) && owned.has(anime.studioId)) {
         await setDoc(doc(db, 'anime', anime.id), cleanForFirestore(anime));
       }
     }
