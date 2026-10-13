@@ -115,7 +115,7 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
   const handleDeleteStudio = async (studio: CloudStudio) => {
     setLoading(true);
     try {
-      await deleteStudio(studio.id, true);
+      await deleteStudio(studio.id, true, true);
       showNotify(`Studio "${studio.name}" deleted. Slot freed up!`);
     } catch (err: any) {
       showNotify(err.message || 'Failed to delete studio', true);
