@@ -150,6 +150,16 @@ export default function App() {
     return () => window.removeEventListener('zanft_studio_profile_updated', onProfileUpdate);
   }, [studioSession]);
 
+  // Studio was deleted (by master or from another device) -> log this session out
+  useEffect(() => {
+    const onStudioDeleted = () => {
+      setStudioSession(null);
+      setActiveTab('home');
+    };
+    window.addEventListener('zanft_studio_deleted', onStudioDeleted);
+    return () => window.removeEventListener('zanft_studio_deleted', onStudioDeleted);
+  }, []);
+
   const handleOwnerLoginSuccess = (session: OwnerSession) => {
     setOwnerSession(session);
     try {
