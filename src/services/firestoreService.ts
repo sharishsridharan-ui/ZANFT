@@ -255,6 +255,17 @@ function getOwnedStudioIds(): Set<string> {
   return ids;
 }
 
+// Cloud deletes need a real Firebase identity. The owner/studio session in
+// localStorage survives a refresh, but the Firebase sign-in may not - so ask again.
+async function ensureCloudSignIn(): Promise<void> {
+  if (auth.currentUser) return;
+  try {
+    await signInWithPopup(auth, googleProvider);
+  } catch {
+    throw new Error('Cloud-la delete aaga Google sign-in venum. Popup-a allow pannitu thirumba try pannunga.');
+  }
+}
+
 // -------------------------------------------------------------
 // TOMBSTONES: deleted ids are recorded in Firestore so EVERY visitor's
 // browser purges them and stale local copies can never be re-uploaded.
@@ -968,6 +979,7 @@ export async function deleteAnimeFolder(
   isMasterOwner: boolean,
   currentStudioName?: string
 ): Promise<void> {
+  await ensureCloudSignIn();
   const animeIdx = memoryAnimeCache.findIndex((a) => a.id === animeId);
   if (animeIdx === -1) return;
 
@@ -1072,6 +1084,7 @@ export async function deleteEpisodeFromAnime(
   isMasterOwner: boolean,
   currentStudioName?: string
 ): Promise<void> {
+  await ensureCloudSignIn();
   const animeIdx = memoryAnimeCache.findIndex((a) => a.id === animeId);
   if (animeIdx === -1) {
     throw new Error('Anime not found.');
@@ -1089,18 +1102,22 @@ export async function deleteEpisodeFromAnime(
   const currentEpisodes: CloudEpisode[] = Array.isArray(currentAnime.episodes) ? currentAnime.episodes : [];
   const updatedEpisodes = currentEpisodes.filter((ep) => ep.id !== episodeId);
 
+  // Save to Firestore FIRST so the delete survives a refresh; surface errors.
+  try {
+    await updateDoc(doc(db, 'anime', animeId), cleanForFirestore({ episodes: updatedEpisodes, updatedAt: new Date().toISOString() }));
+  } catch (err: any) {
+    console.error('Firestore episode delete failed:', err);
+    throw new Error(
+      err?.code === 'permission-denied'
+        ? 'Cloud delete blocked by Firestore rules - Google sign-in pannitu rules check pannunga.'
+        : 'Cloud delete failed. Check internet and try again.'
+    );
+  }
+
   memoryAnimeCache[animeIdx].episodes = updatedEpisodes;
 
   syncCachesToStorage();
   notifyDataChanged();
-
-  // Non-blocking Firestore sync
-  try {
-    const animeDocRef = doc(db, 'anime', animeId);
-    updateDoc(animeDocRef, cleanForFirestore({ episodes: updatedEpisodes, updatedAt: new Date().toISOString() })).catch((err) => {
-      console.warn('Firestore episode delete failed:', err);
-    });
-  } catch {}
 }
 
 export async function deleteStudio(studioId: string, authorized = true): Promise<void> {
@@ -1110,9 +1127,7 @@ export async function deleteStudio(studioId: string, authorized = true): Promise
 
   // 1. Delete from Firestore FIRST (studio doc + ALL its anime docs) so other
   //    users stop seeing it. Errors are surfaced instead of being swallowed.
-  if (!auth.currentUser) {
-    throw new Error('Cloud delete-ku Google sign-in venum. Master/Studio login-la Google sign-in pannitu thirumba try pannunga.');
-  }
+  await ensureCloudSignIn();
   try {
     const studioName = memoryStudiosCache.find((s) => s.id === studioId)?.name;
     const queries = [getDocs(query(collection(db, 'anime'), where('studioId', '==', studioId)))];
