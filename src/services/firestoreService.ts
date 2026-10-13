@@ -11,7 +11,7 @@ import {
   onSnapshot,
   where
 } from 'firebase/firestore';
-import { signInWithPopup } from 'firebase/auth';
+import { signInWithPopup, onAuthStateChanged } from 'firebase/auth';
 import { db, auth, googleProvider, MAX_STUDIO_CAPACITY, MASTER_OWNER_CREDENTIALS, getGoogleDriveStreamInfo } from '../firebase';
 import { Anime, Episode, Studio } from '../types';
 import {
@@ -69,6 +69,22 @@ export interface CloudAnime {
   featured?: boolean;
   trending?: boolean;
   topTenRank?: number;
+}
+
+// -------------------------------------------------------------
+// FIRESTORE SAFETY HELPERS
+// -------------------------------------------------------------
+
+// Firestore rejects `undefined` values, so strip them before writing.
+function cleanForFirestore<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value));
+}
+
+// Studio documents in Firestore are PUBLIC (everyone can read them),
+// so passwords and emails must never be written there.
+function toPublicStudio(studio: Record<string, any>): Record<string, any> {
+  const { password, googleEmail, ...rest } = studio;
+  return cleanForFirestore(rest);
 }
 
 // -------------------------------------------------------------
@@ -320,6 +336,7 @@ export function subscribeToStudios(
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             const existingIdx = memoryStudiosCache.findIndex((s) => s.id === docSnap.id || s.name.toLowerCase() === (data.name || '').toLowerCase());
+            const existing = existingIdx !== -1 ? memoryStudiosCache[existingIdx] : undefined;
             const studioObj: StudioWithAuth = {
               id: docSnap.id,
               name: data.name,
@@ -328,11 +345,13 @@ export function subscribeToStudios(
               bio: data.bio || '',
               logo: data.logo || '',
               banner: data.banner || '',
+              mobileBanner: data.mobileBanner || existing?.mobileBanner || '',
+              location: data.location || existing?.location || '',
               theme: data.theme || 'crimson',
               verified: data.verified !== false,
-              password: data.password || (existingIdx !== -1 ? memoryStudiosCache[existingIdx].password : undefined),
-              googleUid: data.googleUid,
-              googleEmail: data.googleEmail
+              password: data.password || existing?.password,
+              googleUid: data.googleUid ?? existing?.googleUid,
+              googleEmail: existing?.googleEmail
             };
 
             if (existingIdx !== -1) {
@@ -424,10 +443,12 @@ export async function loginOrCreateWithGoogle(user: {
   syncCachesToStorage();
   notifyDataChanged();
 
-  // Background Firestore write (non-blocking)
+  // Background Firestore write (non-blocking). Password/email are NOT sent.
   try {
     const studioDocRef = doc(db, 'studios', studioId);
-    setDoc(studioDocRef, studioPayload).catch(() => {});
+    setDoc(studioDocRef, toPublicStudio(studioPayload)).catch((err) => {
+      console.warn('Firestore studio write failed:', err);
+    });
   } catch {}
 
   return newStudio;
@@ -490,10 +511,12 @@ export async function registerStudio(
   syncCachesToStorage();
   notifyDataChanged();
 
-  // 2. Non-blocking Firestore write
+  // 2. Non-blocking Firestore write. Password/email are NOT sent.
   try {
     const studioDocRef = doc(db, 'studios', studioId);
-    setDoc(studioDocRef, studioPayload).catch(() => {});
+    setDoc(studioDocRef, toPublicStudio(studioPayload)).catch((err) => {
+      console.warn('Firestore studio write failed:', err);
+    });
   } catch {}
 
   return newStudio;
@@ -655,10 +678,15 @@ export async function updateStudioProfile(
   syncCachesToStorage();
   notifyDataChanged();
 
-  // Non-blocking Firestore sync
+  // Non-blocking Firestore sync (password is never sent)
   try {
-    const studioDocRef = doc(db, 'studios', studioId);
-    updateDoc(studioDocRef, updates).catch(() => {});
+    const publicUpdates = toPublicStudio(updates);
+    if (Object.keys(publicUpdates).length > 0) {
+      const studioDocRef = doc(db, 'studios', studioId);
+      updateDoc(studioDocRef, publicUpdates).catch((err) => {
+        console.warn('Firestore studio update failed:', err);
+      });
+    }
   } catch {}
 
   return {
@@ -764,7 +792,9 @@ export async function createAnimeFolder(
   // 2. Non-blocking Firestore sync (try/catch ensures 0 UI failure)
   try {
     const animeDocRef = doc(db, 'anime', animeId);
-    setDoc(animeDocRef, newAnime).catch(() => {});
+    setDoc(animeDocRef, cleanForFirestore(newAnime)).catch((err) => {
+      console.warn('Firestore anime write failed:', err);
+    });
 
     const studioDocRef = doc(db, 'studios', studioId);
     getDoc(studioDocRef).then((snap) => {
@@ -805,7 +835,9 @@ export async function updateAnimeFolder(
   // Non-blocking Firestore sync
   try {
     const animeDocRef = doc(db, 'anime', animeId);
-    updateDoc(animeDocRef, { ...updateData, updatedAt: new Date().toISOString() }).catch(() => {});
+    updateDoc(animeDocRef, cleanForFirestore({ ...updateData, updatedAt: new Date().toISOString() })).catch((err) => {
+      console.warn('Firestore anime update failed:', err);
+    });
   } catch {}
 }
 
@@ -896,7 +928,9 @@ export async function addEpisodeToAnime(
   // Non-blocking Firestore sync
   try {
     const animeDocRef = doc(db, 'anime', animeId);
-    updateDoc(animeDocRef, { episodes: updatedEpisodes, updatedAt: new Date().toISOString() }).catch(() => {});
+    updateDoc(animeDocRef, cleanForFirestore({ episodes: updatedEpisodes, updatedAt: new Date().toISOString() })).catch((err) => {
+      console.warn('Firestore episode update failed:', err);
+    });
   } catch {}
 }
 
@@ -932,7 +966,9 @@ export async function deleteEpisodeFromAnime(
   // Non-blocking Firestore sync
   try {
     const animeDocRef = doc(db, 'anime', animeId);
-    updateDoc(animeDocRef, { episodes: updatedEpisodes, updatedAt: new Date().toISOString() }).catch(() => {});
+    updateDoc(animeDocRef, cleanForFirestore({ episodes: updatedEpisodes, updatedAt: new Date().toISOString() })).catch((err) => {
+      console.warn('Firestore episode delete failed:', err);
+    });
   } catch {}
 }
 
@@ -965,3 +1001,59 @@ export async function deleteStudio(studioId: string, authorized = true): Promise
 export async function seedInitialFirestoreLibrary(): Promise<number> {
   return 0;
 }
+
+// -------------------------------------------------------------
+// CLOUD SYNC: runs automatically for every visitor
+// -------------------------------------------------------------
+
+/**
+ * Uploads studios/anime that exist only in this browser's storage
+ * (and are missing in Firestore). Needs a logged-in Firebase user
+ * because Firestore rules only allow writes for signed-in users.
+ */
+export async function syncLocalToFirestore(): Promise<void> {
+  if (!auth.currentUser) return;
+  try {
+    const [studioSnap, animeSnap] = await Promise.all([
+      getDocs(collection(db, 'studios')),
+      getDocs(collection(db, 'anime'))
+    ]);
+    const remoteStudioIds = new Set(studioSnap.docs.map((d) => d.id));
+    const remoteAnimeIds = new Set(animeSnap.docs.map((d) => d.id));
+
+    for (const studio of memoryStudiosCache) {
+      if (!remoteStudioIds.has(studio.id)) {
+        await setDoc(doc(db, 'studios', studio.id), toPublicStudio(studio));
+      }
+    }
+    for (const anime of memoryAnimeCache) {
+      if (!remoteAnimeIds.has(anime.id)) {
+        await setDoc(doc(db, 'anime', anime.id), cleanForFirestore(anime));
+      }
+    }
+  } catch (err) {
+    console.warn('Local to Firestore sync failed:', err);
+  }
+}
+
+let cloudSyncStarted = false;
+
+/**
+ * Starts the Firestore listeners (so every visitor sees ALL studios/anime)
+ * and uploads this browser's local studios once the user is signed in.
+ */
+export function startCloudSync(): void {
+  if (cloudSyncStarted || typeof window === 'undefined') return;
+  cloudSyncStarted = true;
+
+  subscribeToStudios(() => {});
+  subscribeToAnime(() => {});
+
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      syncLocalToFirestore();
+    }
+  });
+}
+
+startCloudSync();
