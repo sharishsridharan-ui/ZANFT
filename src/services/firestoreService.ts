@@ -21,7 +21,8 @@ import {
   getStoredStudios,
   saveStoredStudios,
   notifyDataChanged,
-  subscribeToDataChanges
+  subscribeToDataChanges,
+  removeWatchProgressForAnime
 } from '../data/storage';
 
 export interface CloudStudio {
@@ -255,7 +256,76 @@ function getOwnedStudioIds(): Set<string> {
 }
 
 // -------------------------------------------------------------
+// TOMBSTONES: deleted ids are recorded in Firestore so EVERY visitor's
+// browser purges them and stale local copies can never be re-uploaded.
+// -------------------------------------------------------------
+const deletedStudioIds = new Set<string>();
+const deletedAnimeIds = new Set<string>();
+
+function readTombstoneDocs(docs: { id: string }[]) {
+  docs.forEach((d) => {
+    if (d.id.startsWith('studio_')) deletedStudioIds.add(d.id.slice(7));
+    else if (d.id.startsWith('anime_')) deletedAnimeIds.add(d.id.slice(6));
+  });
+}
+
+// Removes every deleted studio/anime from memory + localStorage (+ watch history),
+// and logs out a studio session whose studio was deleted.
+function purgeDeleted(): boolean {
+  let changed = false;
+
+  const beforeStudios = memoryStudiosCache.length;
+  memoryStudiosCache = memoryStudiosCache.filter((s) => !deletedStudioIds.has(s.id));
+  if (memoryStudiosCache.length !== beforeStudios) changed = true;
+
+  const removedAnimeIds: string[] = [];
+  memoryAnimeCache = memoryAnimeCache.filter((a) => {
+    const gone = deletedAnimeIds.has(a.id) || deletedStudioIds.has(a.studioId);
+    if (gone) removedAnimeIds.push(a.id);
+    return !gone;
+  });
+  if (removedAnimeIds.length) changed = true;
+  removedAnimeIds.forEach((id) => removeWatchProgressForAnime(id));
+  deletedAnimeIds.forEach((id) => removeWatchProgressForAnime(id));
+
+  try {
+    const raw = localStorage.getItem('zanft_current_studio') || localStorage.getItem('zanft_studio_session');
+    if (raw) {
+      const sess = JSON.parse(raw);
+      if (sess?.studioId && deletedStudioIds.has(sess.studioId)) {
+        localStorage.removeItem('zanft_current_studio');
+        localStorage.removeItem('zanft_studio_session');
+        window.dispatchEvent(new CustomEvent('zanft_studio_deleted'));
+        changed = true;
+      }
+    }
+  } catch {}
+
+  if (changed) {
+    syncCachesToStorage();
+    notifyDataChanged();
+  }
+  return changed;
+}
+
+function startTombstoneSync() {
+  try {
+    onSnapshot(
+      collection(db, 'tombstones'),
+      (snapshot) => {
+        readTombstoneDocs(snapshot.docs);
+        purgeDeleted();
+      },
+      (err) => console.warn('Tombstone sync note:', err)
+    );
+  } catch (err) {
+    console.warn('Tombstone setup note:', err);
+  }
+}
+
+// -------------------------------------------------------------
 // REAL-TIME SUBSCRIPTIONS
+
 
 // -------------------------------------------------------------
 
@@ -329,6 +399,7 @@ export function subscribeToAnime(
           });
 
           memoryAnimeCache.sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime());
+          purgeDeleted();
           syncCachesToStorage();
           onData([...memoryAnimeCache]);
         }
@@ -411,6 +482,7 @@ export function subscribeToStudios(
           });
 
           memoryStudiosCache.sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime());
+          purgeDeleted();
           syncCachesToStorage();
           onData([...memoryStudiosCache]);
         }
@@ -910,7 +982,11 @@ export async function deleteAnimeFolder(
 
   // Delete from Firestore first so other users stop seeing it; surface errors.
   try {
-    await deleteDoc(doc(db, 'anime', animeId));
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'anime', animeId));
+    batch.set(doc(db, 'tombstones', `anime_${animeId}`), { deletedAt: new Date().toISOString() });
+    await batch.commit();
+    deletedAnimeIds.add(animeId);
   } catch (err: any) {
     console.error('Firestore anime delete failed:', err);
     throw new Error(
@@ -1056,7 +1132,11 @@ export async function deleteStudio(studioId: string, authorized = true): Promise
       })
     );
     batch.delete(doc(db, 'studios', studioId));
+    batch.set(doc(db, 'tombstones', `studio_${studioId}`), { deletedAt: new Date().toISOString() });
+    seen.forEach((id) => batch.set(doc(db, 'tombstones', `anime_${id}`), { deletedAt: new Date().toISOString() }));
     await batch.commit();
+    deletedStudioIds.add(studioId);
+    seen.forEach((id) => deletedAnimeIds.add(id));
   } catch (err: any) {
     console.error('Firestore studio delete failed:', err);
     throw new Error(
@@ -1072,6 +1152,7 @@ export async function deleteStudio(studioId: string, authorized = true): Promise
     memoryStudiosCache.splice(studioIdx, 1);
   }
   memoryAnimeCache = memoryAnimeCache.filter((a) => a.studioId !== studioId);
+  purgeDeleted();
 
   syncCachesToStorage();
   notifyDataChanged();
@@ -1096,10 +1177,13 @@ export async function seedInitialFirestoreLibrary(): Promise<number> {
 export async function syncLocalToFirestore(): Promise<void> {
   if (!auth.currentUser) return;
   try {
-    const [studioSnap, animeSnap] = await Promise.all([
+    const [studioSnap, animeSnap, tombSnap] = await Promise.all([
       getDocs(collection(db, 'studios')),
-      getDocs(collection(db, 'anime'))
+      getDocs(collection(db, 'anime')),
+      getDocs(collection(db, 'tombstones'))
     ]);
+    readTombstoneDocs(tombSnap.docs);
+    purgeDeleted();
     const remoteStudioIds = new Set(studioSnap.docs.map((d) => d.id));
     const remoteAnimeIds = new Set(animeSnap.docs.map((d) => d.id));
 
@@ -1107,12 +1191,12 @@ export async function syncLocalToFirestore(): Promise<void> {
     // deleted by someone else would be re-created ("zombie studios").
     const owned = getOwnedStudioIds();
     for (const studio of memoryStudiosCache) {
-      if (!remoteStudioIds.has(studio.id) && owned.has(studio.id)) {
+      if (!remoteStudioIds.has(studio.id) && owned.has(studio.id) && !deletedStudioIds.has(studio.id)) {
         await setDoc(doc(db, 'studios', studio.id), toPublicStudio(studio));
       }
     }
     for (const anime of memoryAnimeCache) {
-      if (!remoteAnimeIds.has(anime.id) && owned.has(anime.studioId)) {
+      if (!remoteAnimeIds.has(anime.id) && owned.has(anime.studioId) && !deletedAnimeIds.has(anime.id) && !deletedStudioIds.has(anime.studioId)) {
         await setDoc(doc(db, 'anime', anime.id), cleanForFirestore(anime));
       }
     }
@@ -1131,6 +1215,7 @@ export function startCloudSync(): void {
   if (cloudSyncStarted || typeof window === 'undefined') return;
   cloudSyncStarted = true;
 
+  startTombstoneSync();
   subscribeToStudios(() => {});
   subscribeToAnime(() => {});
 
