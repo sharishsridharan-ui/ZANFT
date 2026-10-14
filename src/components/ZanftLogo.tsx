@@ -143,13 +143,13 @@ export const ZanftLogo: React.FC<ZanftLogoProps> = ({
       {showText && (
         <div className="flex flex-col justify-center leading-none">
           <div className="flex items-center space-x-1.5">
-            <span className={`font-syne font-black text-white tracking-wider ${textSizeClasses}`}>
+            <span className={`font-display font-black text-white tracking-wider ${textSizeClasses}`}>
               ZANFT
             </span>
-            <span className="w-1.5 h-1.5 rounded-full bg-[#E50914] shadow-[0_0_10px_#E50914] animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-brand shadow-[0_0_10px_#E50914] animate-pulse" />
           </div>
           {showSubtext && (
-            <span className="flex items-center text-[7.5px] xs:text-[8px] sm:text-[9.5px] font-extrabold uppercase tracking-[0.10em] sm:tracking-[0.16em] text-[#E50914] mt-0.5 whitespace-nowrap">
+            <span className="flex items-center text-[7.5px] xs:text-[8px] sm:text-[9.5px] font-extrabold uppercase tracking-[0.10em] sm:tracking-[0.16em] text-brand mt-0.5 whitespace-nowrap">
               {subtext}
             </span>
           )}
@@ -158,3 +158,4 @@ export const ZanftLogo: React.FC<ZanftLogoProps> = ({
     </div>
   );
 };
+
