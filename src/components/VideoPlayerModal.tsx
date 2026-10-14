@@ -1,25 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  X,
-  Tv,
-  ChevronLeft,
-  ChevronRight,
-  Maximize,
-  Minimize,
-  Film,
-  Building2,
-  Play,
-  RotateCcw,
-  CheckCircle2,
-  Share2,
-  Check,
-  Clock,
-  Sparkles,
-  RefreshCw,
-  AlertCircle,
-  Server,
-  Ratio
-} from 'lucide-react';
+import { Tv, ChevronLeft, ChevronRight, Maximize, Minimize, Film, Building2, Play, RotateCcw, CheckCircle2, Share2, Check, Clock, Sparkles, RefreshCw, AlertCircle, Server, Ratio } from 'lucide-react';
 import { Anime, Episode } from '../types';
 import { getGoogleDriveStreamInfo, extractYouTubeId } from '../firebase';
 
@@ -258,7 +238,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   const serverBtn = (active: boolean) =>
     `px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
       active
-        ? 'bg-[#E50914] text-white shadow-md shadow-[#E50914]/30 ring-1 ring-[#E50914]'
+        ? 'bg-brand text-white shadow-md shadow-brand/30 ring-1 ring-brand'
         : 'bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/10'
     }`;
 
@@ -273,7 +253,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       )}
 
       {/* Top Bar Navigation */}
-      <header className="sticky top-0 z-40 bg-[#08080C]/90 backdrop-blur-md border-b border-white/10 px-4 sm:px-6 py-3 flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-ink/90 backdrop-blur-md border-b border-white/10 px-4 sm:px-6 py-3 flex items-center justify-between">
         <div className="flex items-center space-x-3 min-w-0">
           <button
             onClick={onClose}
@@ -285,7 +265,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           </button>
 
           <div className="min-w-0">
-            <h2 className="font-syne font-bold text-white text-xs sm:text-sm truncate">
+            <h2 className="font-display font-bold text-white text-xs sm:text-sm truncate">
               {anime.title}
             </h2>
             <p className="text-[11px] text-zinc-400 truncate">
@@ -298,7 +278,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           {hasNextEpisode && (
             <button
               onClick={onNextEpisode}
-              className="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-[#E50914] hover:bg-[#B0000D] text-white text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
+              className="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-brand hover:bg-brand-deep text-white text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
               title={`Next Episode #${nextEpisode?.number}`}
             >
               <span className="hidden xs:inline">Next Ep #{nextEpisode?.number}</span>
@@ -312,14 +292,6 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             title="Toggle Fullscreen (F)"
           >
             {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-          </button>
-
-          <button
-            onClick={onClose}
-            className="p-1.5 sm:p-2 rounded-xl bg-white/5 hover:bg-white/15 text-zinc-400 hover:text-white transition-all cursor-pointer border border-white/10"
-            title="Close Stream (Esc)"
-          >
-            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
       </header>
@@ -358,7 +330,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
                   {/* Small ZANFT badge, inset from the edges, clicks pass through */}
                   <div className="absolute top-2 left-2 z-30 pointer-events-none flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-[10px] font-bold text-zinc-200">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#E50914] animate-pulse" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />
                     <span>ZANFT</span>
                     <span className="text-[9px] text-zinc-400 font-mono">HD</span>
                   </div>
@@ -414,9 +386,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             />
           ) : (
             /* D. MISSING OR INVALID VIDEO URL */
-            <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-3 bg-[#0D0F1B]">
-              <Tv className="w-12 h-12 text-[#E50914]" />
-              <h4 className="font-syne font-bold text-white text-base">Video Stream Pending Upload</h4>
+            <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-3 bg-surface">
+              <Tv className="w-12 h-12 text-brand" />
+              <h4 className="font-display font-bold text-white text-base">Video Stream Pending Upload</h4>
               <p className="text-xs text-zinc-400 max-w-sm">
                 No video stream link attached to this episode yet. Please verify the episode streaming link in the Studio Dashboard.
               </p>
@@ -453,15 +425,15 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               onClick={(e) => e.stopPropagation()}
               className="absolute inset-0 z-40 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-300"
             >
-              <div className="max-w-md w-full bg-[#0D101C] border border-white/15 rounded-3xl p-6 text-center space-y-4 shadow-2xl">
-                <span className="px-3 py-1 rounded-full bg-[#E50914]/20 border border-[#E50914]/40 text-[#E50914] text-xs font-black uppercase tracking-wider inline-flex items-center space-x-1.5">
+              <div className="max-w-md w-full bg-surface border border-white/15 rounded-3xl p-6 text-center space-y-4 shadow-2xl">
+                <span className="px-3 py-1 rounded-full bg-brand/20 border border-brand/40 text-brand text-xs font-black uppercase tracking-wider inline-flex items-center space-x-1.5">
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>Episode Complete</span>
                 </span>
 
                 {hasNextEpisode && nextEpisode ? (
                   <>
-                    <h3 className="font-syne font-bold text-white text-lg">
+                    <h3 className="font-display font-bold text-white text-lg">
                       Up Next: Episode {nextEpisode.number}
                     </h3>
                     <p className="text-xs text-zinc-300 truncate">
@@ -475,7 +447,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                     <div className="flex items-center justify-center gap-3 pt-2">
                       <button
                         onClick={onNextEpisode}
-                        className="px-5 py-2.5 rounded-xl bg-[#E50914] hover:bg-[#B0000D] text-white font-bold text-xs flex items-center space-x-1.5 shadow-lg active:scale-95 cursor-pointer"
+                        className="px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-deep text-white font-bold text-xs flex items-center space-x-1.5 shadow-lg active:scale-95 cursor-pointer"
                       >
                         <Play className="w-4 h-4 fill-white" />
                         <span>Play Now</span>
@@ -499,7 +471,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                 ) : (
                   <>
                     <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
-                    <h3 className="font-syne font-bold text-white text-base">You're All Caught Up!</h3>
+                    <h3 className="font-display font-bold text-white text-base">You're All Caught Up!</h3>
                     <p className="text-xs text-zinc-400">
                       You've watched all available episodes for this series.
                     </p>
@@ -523,7 +495,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           {/* Stream Server Selector */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-white/5">
             <div className="flex items-center gap-2">
-              <Server className="w-4 h-4 text-[#E50914]" />
+              <Server className="w-4 h-4 text-brand" />
               <span className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
                 Streaming Server:
               </span>
@@ -617,22 +589,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
             {/* Reload */}
             <button onClick={handleReloadStream} className={optionBtn} title="Reload Stream">
-              <RefreshCw className={`w-3.5 h-3.5 text-[#E50914] flex-shrink-0 ${isReloading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-brand flex-shrink-0 ${isReloading ? 'animate-spin' : ''}`} />
               <span className="truncate">{isReloading ? 'Reloading...' : 'Reload'}</span>
-            </button>
-
-            {/* Fullscreen */}
-            <button
-              onClick={toggleFullscreen}
-              className={optionBtn}
-              title="Toggle Fullscreen"
-            >
-              {isFullscreen ? (
-                <Minimize className="w-3.5 h-3.5 text-zinc-400 flex-shrink-0" />
-              ) : (
-                <Maximize className="w-3.5 h-3.5 text-zinc-400 flex-shrink-0" />
-              )}
-              <span className="truncate">Fullscreen</span>
             </button>
           </div>
         </div>
@@ -644,17 +602,17 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-2 min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-md bg-[#E50914] text-white text-[10px] font-black uppercase tracking-wider">
+                <span className="px-2.5 py-0.5 rounded-md bg-brand text-white text-[10px] font-black uppercase tracking-wider">
                   {anime.type || 'Anime'}
                 </span>
                 <div className="flex items-center gap-1.5 text-xs text-zinc-300 font-semibold bg-white/5 px-3 py-1 rounded-full border border-white/10 min-w-0">
-                  <Building2 className="w-3.5 h-3.5 text-[#E50914] flex-shrink-0" />
+                  <Building2 className="w-3.5 h-3.5 text-brand flex-shrink-0" />
                   <span className="truncate">Studio: {anime.studioName}</span>
                 </div>
               </div>
 
               <div className="min-w-0">
-                <h1 className="font-syne font-black text-xl sm:text-2xl text-white truncate">
+                <h1 className="font-display font-black text-xl sm:text-2xl text-white truncate">
                   {anime.title}
                 </h1>
                 <p className="text-sm font-semibold text-zinc-300 mt-0.5 truncate">
@@ -675,8 +633,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
         <div className="space-y-3 pt-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <Film className="w-4 h-4 text-[#E50914] flex-shrink-0" />
-              <h3 className="font-syne font-bold text-white text-base truncate">
+              <Film className="w-4 h-4 text-brand flex-shrink-0" />
+              <h3 className="font-display font-bold text-white text-base truncate">
                 More Episodes ({episodes.length})
               </h3>
             </div>
@@ -697,7 +655,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   onClick={() => onSelectEpisode && onSelectEpisode(ep)}
                   className={`group min-w-0 rounded-xl overflow-hidden border p-2.5 transition-all cursor-pointer text-left flex flex-col justify-between space-y-2.5 ${
                     isCurrent
-                      ? 'bg-slate-900 border-[#E50914] shadow-[0_0_20px_rgba(229,9,20,0.25)] ring-1 ring-[#E50914]'
+                      ? 'bg-slate-900 border-brand shadow-[0_0_20px_rgba(229,9,20,0.25)] ring-1 ring-brand'
                       : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-800/80'
                   }`}
                 >
@@ -730,7 +688,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                   </div>
 
                   <div className="min-w-0">
-                    <h4 className="font-bold text-xs text-white truncate group-hover:text-[#E50914] transition-colors">
+                    <h4 className="font-bold text-xs text-white truncate group-hover:text-brand transition-colors">
                       {ep.title}
                     </h4>
                     <p className="text-[11px] text-zinc-400 font-mono mt-0.5 flex items-center gap-1">
