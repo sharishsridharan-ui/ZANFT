@@ -1,6 +1,0 @@
-{
-  "name": "ZANFT - Fan Dub Streaming Website",
-  "description": "ZANFT is an anime fan dub streaming website for creators and anime lovers. Built by Matrix Builds.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
