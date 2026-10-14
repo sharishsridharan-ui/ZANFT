@@ -1,20 +1,7 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  onSnapshot,
-  where,
-  writeBatch
-} from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, onSnapshot, where, writeBatch } from 'firebase/firestore';
 import { signInWithPopup, onAuthStateChanged } from 'firebase/auth';
 import { db, auth, googleProvider, MAX_STUDIO_CAPACITY, MASTER_OWNER_CREDENTIALS, getGoogleDriveStreamInfo } from '../firebase';
-import { Anime, Episode, Studio } from '../types';
+import { Anime, Studio } from '../types';
 import {
   getStoredAnime,
   saveStoredAnime,
@@ -24,6 +11,7 @@ import {
   subscribeToDataChanges,
   removeWatchProgressForAnime
 } from '../data/storage';
+import { loadStudioSession, clearStudioSession } from '../utils/session';
 
 export interface CloudStudio {
   id: string;
@@ -239,12 +227,9 @@ function syncCachesToStorage() {
 function getOwnedStudioIds(): Set<string> {
   const ids = new Set<string>();
   try {
-    const raw = localStorage.getItem('zanft_current_studio') || localStorage.getItem('zanft_studio_session');
-    if (raw) {
-      const sess = JSON.parse(raw);
-      if (sess?.studioId) ids.add(sess.studioId);
-      if (sess?.id) ids.add(sess.id);
-    }
+    const sess: any = loadStudioSession();
+    if (sess?.studioId) ids.add(sess.studioId);
+    if (sess?.id) ids.add(sess.id);
   } catch {}
   const uid = auth.currentUser?.uid;
   if (uid) {
@@ -300,15 +285,11 @@ function purgeDeleted(): boolean {
   deletedAnimeIds.forEach((id) => removeWatchProgressForAnime(id));
 
   try {
-    const raw = localStorage.getItem('zanft_current_studio') || localStorage.getItem('zanft_studio_session');
-    if (raw) {
-      const sess = JSON.parse(raw);
-      if (sess?.studioId && deletedStudioIds.has(sess.studioId)) {
-        localStorage.removeItem('zanft_current_studio');
-        localStorage.removeItem('zanft_studio_session');
-        window.dispatchEvent(new CustomEvent('zanft_studio_deleted'));
-        changed = true;
-      }
+    const sess = loadStudioSession();
+    if (sess?.studioId && deletedStudioIds.has(sess.studioId)) {
+      clearStudioSession();
+      window.dispatchEvent(new CustomEvent('zanft_studio_deleted'));
+      changed = true;
     }
   } catch {}
 
