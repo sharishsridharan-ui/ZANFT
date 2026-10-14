@@ -1,39 +1,6 @@
 import React, { useState } from 'react';
-import {
-  Crown,
-  ShieldAlert,
-  Building2,
-  Film,
-  Tv,
-  Trash2,
-  Edit3,
-  Plus,
-  Video,
-  Play,
-  X,
-  Sparkles,
-  CheckCircle2,
-  AlertCircle,
-  LogOut,
-  Users,
-  Search,
-  Database,
-  RefreshCw,
-  Eye,
-  ExternalLink
-} from 'lucide-react';
-import {
-  CloudStudio,
-  CloudAnime,
-  CloudEpisode,
-  deleteStudio,
-  deleteAnimeFolder,
-  updateAnimeFolder,
-  createAnimeFolder,
-  addEpisodeToAnime,
-  deleteEpisodeFromAnime,
-  updateStudioByOwner
-} from '../services/firestoreService';
+import { Crown, Building2, Film, Trash2, Edit3, Video, Play, X, CheckCircle2, AlertCircle, LogOut, Users, Search, Database } from 'lucide-react';
+import { CloudStudio, CloudAnime, CloudEpisode, deleteStudio, deleteAnimeFolder, updateAnimeFolder, addEpisodeToAnime, deleteEpisodeFromAnime, updateStudioByOwner } from '../services/firestoreService';
 import { OwnerSession } from '../types';
 import { MAX_STUDIO_CAPACITY } from '../firebase';
 
@@ -69,7 +36,6 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
 
   const [editingAnime, setEditingAnime] = useState<CloudAnime | null>(null);
   const [selectedAnimeForEpisode, setSelectedAnimeForEpisode] = useState<CloudAnime | null>(null);
-  const [isCreateAnimeOpen, setIsCreateAnimeOpen] = useState(false);
 
   // Forms
   const [animeTitle, setAnimeTitle] = useState('');
@@ -77,7 +43,6 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
   const [animeGenres, setAnimeGenres] = useState('Action, Fantasy');
   const [animeSynopsis, setAnimeSynopsis] = useState('');
   const [animePoster, setAnimePoster] = useState('');
-  const [targetStudioId, setTargetStudioId] = useState('');
 
   // Episode form
   const [epNumber, setEpNumber] = useState(1);
@@ -115,7 +80,7 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
   const handleDeleteStudio = async (studio: CloudStudio) => {
     setLoading(true);
     try {
-      await deleteStudio(studio.id, true, true);
+      await deleteStudio(studio.id);
       showNotify(`Studio "${studio.name}" deleted. Slot freed up!`);
     } catch (err: any) {
       showNotify(err.message || 'Failed to delete studio', true);
@@ -235,19 +200,19 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-2xl animate-in fade-in duration-200 overflow-y-auto">
-      <div className="relative w-full max-w-7xl max-h-[94vh] flex flex-col bg-[#07080F] border border-amber-500/30 rounded-3xl shadow-[0_0_60px_rgba(245,158,11,0.2)] overflow-hidden my-auto">
+      <div className="relative w-full max-w-7xl max-h-[94vh] flex flex-col bg-ink border border-amber-500/30 rounded-3xl shadow-[0_0_60px_rgba(245,158,11,0.2)] overflow-hidden my-auto">
         {/* Master Gold Glow Accent */}
         <div className="h-1.5 w-full bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500" />
 
         {/* Master Header */}
-        <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 bg-[#111322] border-b border-white/10">
+        <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 bg-surface border-b border-white/10">
           <div className="flex items-center space-x-3">
             <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
               <Crown className="w-7 h-7" />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="font-syne font-black text-white text-xl sm:text-2xl tracking-wide">
+                <h2 className="font-display font-black text-white text-xl sm:text-2xl tracking-wide">
                   Master Owner Dashboard
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-black text-[11px] font-black uppercase tracking-wider">
@@ -292,12 +257,12 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
         {/* Master Stats Row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 sm:p-6 bg-black/40 border-b border-white/5">
           {/* Studio Capacity */}
-          <div className="p-3.5 rounded-2xl bg-[#121422] border border-white/10 space-y-1">
+          <div className="p-3.5 rounded-2xl bg-surface-raised border border-white/10 space-y-1">
             <div className="flex items-center justify-between text-xs text-zinc-400">
               <span>Studio Slots (Max 100)</span>
               <Users className="w-4 h-4 text-amber-400" />
             </div>
-            <p className="font-syne font-black text-white text-xl sm:text-2xl">
+            <p className="font-display font-black text-white text-xl sm:text-2xl">
               {studios.length} <span className="text-xs font-normal text-zinc-400">/ 100</span>
             </p>
             <p className="text-[11px] font-bold text-emerald-400">
@@ -306,12 +271,12 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
           </div>
 
           {/* Total Anime Folders */}
-          <div className="p-3.5 rounded-2xl bg-[#121422] border border-white/10 space-y-1">
+          <div className="p-3.5 rounded-2xl bg-surface-raised border border-white/10 space-y-1">
             <div className="flex items-center justify-between text-xs text-zinc-400">
               <span>Total Anime Folders</span>
-              <Film className="w-4 h-4 text-[#E50914]" />
+              <Film className="w-4 h-4 text-brand" />
             </div>
-            <p className="font-syne font-black text-white text-xl sm:text-2xl">
+            <p className="font-display font-black text-white text-xl sm:text-2xl">
               {allAnime.length}
             </p>
             <p className="text-[11px] text-zinc-400">
@@ -320,12 +285,12 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
           </div>
 
           {/* Total Episodes Streamed */}
-          <div className="p-3.5 rounded-2xl bg-[#121422] border border-white/10 space-y-1">
+          <div className="p-3.5 rounded-2xl bg-surface-raised border border-white/10 space-y-1">
             <div className="flex items-center justify-between text-xs text-zinc-400">
               <span>Total Episodes</span>
               <Video className="w-4 h-4 text-emerald-400" />
             </div>
-            <p className="font-syne font-black text-white text-xl sm:text-2xl">
+            <p className="font-display font-black text-white text-xl sm:text-2xl">
               {totalEpisodes}
             </p>
             <p className="text-[11px] text-zinc-400">
@@ -334,12 +299,12 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
           </div>
 
           {/* Cloud Database Status */}
-          <div className="p-3.5 rounded-2xl bg-[#121422] border border-white/10 space-y-1">
+          <div className="p-3.5 rounded-2xl bg-surface-raised border border-white/10 space-y-1">
             <div className="flex items-center justify-between text-xs text-zinc-400">
               <span>Cloud DB Engine</span>
               <Database className="w-4 h-4 text-blue-400" />
             </div>
-            <p className="font-syne font-black text-white text-base sm:text-lg text-emerald-400">
+            <p className="font-display font-black text-white text-base sm:text-lg text-emerald-400">
               Firebase Live
             </p>
             <p className="text-[11px] text-zinc-400 font-mono truncate">
@@ -349,7 +314,7 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
         </div>
 
         {/* Tab Selector & Search Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 bg-[#0E101D] border-b border-white/10">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3 bg-surface border-b border-white/10">
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setActiveTab('studios')}
@@ -395,7 +360,7 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-syne font-bold text-white text-base">
+                  <h3 className="font-display font-bold text-white text-base">
                     All Registered Studios ({filteredStudios.length})
                   </h3>
                   <p className="text-xs text-zinc-400">
@@ -413,7 +378,7 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
                   {filteredStudios.map((studio, idx) => (
                     <div
                       key={studio.id}
-                      className="p-4 rounded-2xl bg-[#121422] border border-white/10 hover:border-amber-500/30 transition-all flex flex-col justify-between space-y-3"
+                      className="p-4 rounded-2xl bg-surface-raised border border-white/10 hover:border-amber-500/30 transition-all flex flex-col justify-between space-y-3"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex items-center space-x-2.5">
@@ -421,7 +386,7 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
                             #{idx + 1}
                           </span>
                           <div>
-                            <h4 className="font-syne font-bold text-white text-sm leading-tight">
+                            <h4 className="font-display font-bold text-white text-sm leading-tight">
                               {studio.name}
                             </h4>
                             <p className="text-[10px] text-zinc-400 font-mono mt-0.5">
@@ -468,7 +433,7 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-syne font-bold text-white text-base">
+                  <h3 className="font-display font-bold text-white text-base">
                     Platform Global Anime Folders ({filteredAnime.length})
                   </h3>
                   <p className="text-xs text-zinc-400">
@@ -486,7 +451,7 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
                   {filteredAnime.map((anime) => (
                     <div
                       key={anime.id}
-                      className="p-4 rounded-2xl bg-[#121422] border border-white/10 flex flex-col justify-between space-y-3"
+                      className="p-4 rounded-2xl bg-surface-raised border border-white/10 flex flex-col justify-between space-y-3"
                     >
                       <div className="flex gap-3">
                         {(anime.poster || anime.banner) ? (
@@ -506,7 +471,7 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
                         <div className="flex-1 min-w-0 space-y-1">
                           <div className="flex items-start justify-between">
                             <div>
-                              <h4 className="font-syne font-bold text-white text-sm leading-tight truncate">
+                              <h4 className="font-display font-bold text-white text-sm leading-tight truncate">
                                 {anime.title}
                               </h4>
                               <p className="text-xs text-amber-400 font-medium">
@@ -599,9 +564,9 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
         {/* EDIT ANIME MODAL (MASTER) */}
         {editingAnime && (
           <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <div className="relative w-full max-w-lg bg-[#0F111D] border border-amber-500/40 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
+            <div className="relative w-full max-w-lg bg-surface border border-amber-500/40 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
               <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                <h3 className="font-syne font-bold text-white text-base">
+                <h3 className="font-display font-bold text-white text-base">
                   Master Edit: &quot;{editingAnime.title}&quot;
                 </h3>
                 <button
@@ -691,9 +656,9 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
         {/* ADD EPISODE MODAL (MASTER) */}
         {selectedAnimeForEpisode && (
           <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <div className="relative w-full max-w-md bg-[#0F111D] border border-amber-500/40 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
+            <div className="relative w-full max-w-md bg-surface border border-amber-500/40 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
               <div className="flex items-center justify-between pb-3 border-b border-white/10">
-                <h3 className="font-syne font-bold text-white text-base">
+                <h3 className="font-display font-bold text-white text-base">
                   Master: Add Episode
                 </h3>
                 <button
@@ -775,11 +740,11 @@ export const MasterOwnerDashboard: React.FC<MasterOwnerDashboardProps> = ({
         {/* EDIT STUDIO MODAL (MASTER OWNER GLOBAL AUTHORITY) */}
         {editingStudio && (
           <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-            <div className="relative w-full max-w-lg bg-[#0F111D] border border-amber-500/40 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
+            <div className="relative w-full max-w-lg bg-surface border border-amber-500/40 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
               <div className="flex items-center justify-between pb-3 border-b border-white/10">
                 <div className="flex items-center space-x-2">
                   <Crown className="w-4 h-4 text-amber-400" />
-                  <h3 className="font-syne font-bold text-white text-base">
+                  <h3 className="font-display font-bold text-white text-base">
                     Master Edit: {editingStudio.name}
                   </h3>
                 </div>
