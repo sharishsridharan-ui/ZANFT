@@ -1,7 +1,18 @@
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, onSnapshot, where, writeBatch } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  query,
+  onSnapshot,
+  where,
+  writeBatch
+} from 'firebase/firestore';
 import { signInWithPopup, onAuthStateChanged } from 'firebase/auth';
 import { db, auth, googleProvider, MAX_STUDIO_CAPACITY, MASTER_OWNER_CREDENTIALS, getGoogleDriveStreamInfo } from '../firebase';
-import { Anime, Studio } from '../types';
+import { Anime, Studio, Trailer } from '../types';
 import {
   getStoredAnime,
   saveStoredAnime,
@@ -11,7 +22,6 @@ import {
   subscribeToDataChanges,
   removeWatchProgressForAnime
 } from '../data/storage';
-import { loadStudioSession, clearStudioSession } from '../utils/session';
 
 export interface CloudStudio {
   id: string;
@@ -33,7 +43,8 @@ export interface CloudEpisode {
   id: string;
   number: number;
   title: string;
-  videoUrl: string; // Google Drive Public Video URL or stream
+  videoUrl: string; // Drive link (Server 1). May be empty if only a bot stream link is given.
+  botStreamUrl?: string; // Telegram bot stream link
   duration?: string;
   synopsis?: string;
   thumbnail?: string;
@@ -59,6 +70,7 @@ export interface CloudAnime {
   featured?: boolean;
   trending?: boolean;
   topTenRank?: number;
+  trailer?: Trailer | null;
 }
 
 // -------------------------------------------------------------
@@ -143,6 +155,7 @@ function initCachesFromStorage() {
           number: ep.number,
           title: ep.title,
           videoUrl: ep.videoUrl,
+          botStreamUrl: ep.botStreamUrl,
           duration: ep.duration || '24m',
           thumbnail: ep.thumbnail || a.poster || '',
           releaseDate: ep.releaseDate || new Date().toISOString()
@@ -153,6 +166,7 @@ function initCachesFromStorage() {
         createdAt: a.createdAt || new Date().toISOString(),
         featured: !!a.featured,
         trending: !!a.trending,
+        trailer: a.trailer,
         topTenRank: a.topTenRank
       }));
     }
@@ -205,14 +219,16 @@ function syncCachesToStorage() {
         duration: ep.duration || '24m',
         thumbnail: ep.thumbnail || ca.poster,
         synopsis: ep.synopsis,
-        videoUrl: ep.videoUrl
+        videoUrl: ep.videoUrl,
+        botStreamUrl: ep.botStreamUrl
       })),
       rating: ca.rating || 'TV-14',
       matchPercentage: ca.matchPercentage || 95,
       year: ca.year || new Date().getFullYear(),
       seasons: 1,
       episodesCount: (ca.episodes || []).length,
-      createdAt: ca.createdAt
+      createdAt: ca.createdAt,
+      trailer: ca.trailer || undefined
     }));
     saveStoredAnime(mappedAnime);
 
@@ -227,9 +243,12 @@ function syncCachesToStorage() {
 function getOwnedStudioIds(): Set<string> {
   const ids = new Set<string>();
   try {
-    const sess: any = loadStudioSession();
-    if (sess?.studioId) ids.add(sess.studioId);
-    if (sess?.id) ids.add(sess.id);
+    const raw = localStorage.getItem('zanft_current_studio') || localStorage.getItem('zanft_studio_session');
+    if (raw) {
+      const sess = JSON.parse(raw);
+      if (sess?.studioId) ids.add(sess.studioId);
+      if (sess?.id) ids.add(sess.id);
+    }
   } catch {}
   const uid = auth.currentUser?.uid;
   if (uid) {
@@ -240,14 +259,27 @@ function getOwnedStudioIds(): Set<string> {
   return ids;
 }
 
+// Master owner Google account - must match isMaster() in firestore.rules
+export const MASTER_OWNER_EMAIL = 'sharishsridharan@gmail.com';
+
 // Cloud deletes need a real Firebase identity. The owner/studio session in
 // localStorage survives a refresh, but the Firebase sign-in may not - so ask again.
-async function ensureCloudSignIn(): Promise<void> {
-  if (auth.currentUser) return;
-  try {
-    await signInWithPopup(auth, googleProvider);
-  } catch {
-    throw new Error('Cloud-la delete aaga Google sign-in venum. Popup-a allow pannitu thirumba try pannunga.');
+// When the caller is the Master Owner, the Google account must be the owner Gmail.
+async function ensureCloudSignIn(isMasterOwner = false): Promise<void> {
+  if (!auth.currentUser) {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch {
+      throw new Error('Cloud-la delete aaga Google sign-in venum. Popup-a allow pannitu thirumba try pannunga.');
+    }
+  }
+  if (isMasterOwner) {
+    const email = (auth.currentUser?.email || '').toLowerCase();
+    if (email !== MASTER_OWNER_EMAIL) {
+      // sign out the wrong account so the next click asks for the right one
+      try { await auth.signOut(); } catch {}
+      throw new Error(`Master delete-ku ${MASTER_OWNER_EMAIL} account-la Google sign-in pannunga. (Ippo: ${email || 'unknown'})`);
+    }
   }
 }
 
@@ -285,11 +317,15 @@ function purgeDeleted(): boolean {
   deletedAnimeIds.forEach((id) => removeWatchProgressForAnime(id));
 
   try {
-    const sess = loadStudioSession();
-    if (sess?.studioId && deletedStudioIds.has(sess.studioId)) {
-      clearStudioSession();
-      window.dispatchEvent(new CustomEvent('zanft_studio_deleted'));
-      changed = true;
+    const raw = localStorage.getItem('zanft_current_studio') || localStorage.getItem('zanft_studio_session');
+    if (raw) {
+      const sess = JSON.parse(raw);
+      if (sess?.studioId && deletedStudioIds.has(sess.studioId)) {
+        localStorage.removeItem('zanft_current_studio');
+        localStorage.removeItem('zanft_studio_session');
+        window.dispatchEvent(new CustomEvent('zanft_studio_deleted'));
+        changed = true;
+      }
     }
   } catch {}
 
@@ -363,7 +399,8 @@ export function subscribeToAnime(
               createdAt: data.createdAt || new Date().toISOString(),
               featured: !!data.featured,
               trending: !!data.trending,
-              topTenRank: data.topTenRank
+              topTenRank: data.topTenRank,
+              trailer: data.trailer || undefined
             });
           });
 
@@ -831,6 +868,15 @@ export async function updateStudioByOwner(
 // ANIME FOLDER CREATION & MANAGEMENT (Real Creator Uploads)
 // -------------------------------------------------------------
 
+// Returns a clean trailer, or undefined when no link was given (trailer is optional).
+function normalizeTrailer(t?: Trailer | null): Trailer | undefined {
+  if (!t) return undefined;
+  const videoUrl = (t.videoUrl || '').trim();
+  const botStreamUrl = (t.botStreamUrl || '').trim();
+  if (!videoUrl && !botStreamUrl) return undefined;
+  return { title: (t.title || '').trim() || 'Official Trailer', videoUrl, botStreamUrl };
+}
+
 export async function createAnimeFolder(
   animeData: {
     title: string;
@@ -842,9 +888,11 @@ export async function createAnimeFolder(
     initialEpisode?: {
       number?: number;
       title: string;
-      videoUrl: string;
+      videoUrl?: string; // Drive link
+      botStreamUrl?: string; // Telegram bot stream link
       duration?: string;
     };
+    trailer?: Trailer | null; // optional - can also be added later
   },
   studioId: string,
   studioName: string
@@ -857,14 +905,16 @@ export async function createAnimeFolder(
   const now = new Date().toISOString();
 
   const episodes: CloudEpisode[] = [];
-  if (animeData.initialEpisode && animeData.initialEpisode.videoUrl?.trim()) {
-    const rawUrl = animeData.initialEpisode.videoUrl.trim();
+  if (animeData.initialEpisode && (animeData.initialEpisode.videoUrl?.trim() || animeData.initialEpisode.botStreamUrl?.trim())) {
+    const rawUrl = (animeData.initialEpisode.videoUrl || '').trim();
+    const botUrl = (animeData.initialEpisode.botStreamUrl || '').trim();
     const driveInfo = getGoogleDriveStreamInfo(rawUrl);
     episodes.push({
       id: `ep-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       number: animeData.initialEpisode.number || 1,
       title: animeData.initialEpisode.title?.trim() || (animeData.type === 'Movie' ? 'Full Feature Film' : 'Episode 1'),
       videoUrl: rawUrl,
+      botStreamUrl: botUrl,
       duration: animeData.initialEpisode.duration?.trim() || (animeData.type === 'Movie' ? '1h 45m' : '24m'),
       thumbnail: driveInfo.thumbnailUrl || animeData.poster.trim() || '',
       releaseDate: now
@@ -887,7 +937,8 @@ export async function createAnimeFolder(
     year: new Date().getFullYear(),
     createdAt: now,
     featured: false,
-    trending: true
+    trending: true,
+    trailer: normalizeTrailer(animeData.trailer)
   };
 
   // 1. Immediately store in live memory and persistent storage (0ms)
@@ -960,7 +1011,7 @@ export async function deleteAnimeFolder(
   isMasterOwner: boolean,
   currentStudioName?: string
 ): Promise<void> {
-  await ensureCloudSignIn();
+  await ensureCloudSignIn(isMasterOwner);
   const animeIdx = memoryAnimeCache.findIndex((a) => a.id === animeId);
   if (animeIdx === -1) return;
 
@@ -984,7 +1035,7 @@ export async function deleteAnimeFolder(
     console.error('Firestore anime delete failed:', err);
     throw new Error(
       err?.code === 'permission-denied'
-        ? 'Cloud delete blocked by Firestore rules - sign in with Google and try again.'
+        ? `Cloud delete blocked by Firestore rules. Signed in as: ${auth.currentUser?.email || 'nobody'} - indha email rules la isMaster() la irukkanu check pannunga.`
         : 'Cloud delete failed. Check internet and try again.'
     );
   }
@@ -1006,17 +1057,18 @@ export async function addEpisodeToAnime(
   episodeData: {
     number: number;
     title: string;
-    videoUrl: string; // Google Drive Public Video URL
+    videoUrl?: string; // Drive link
+    botStreamUrl?: string; // Telegram bot stream link
     duration?: string;
   },
   currentStudioId: string,
   isMasterOwner: boolean
 ): Promise<void> {
   if (!episodeData.title.trim()) {
-    throw new Error('Episode title is required.');
+    throw new Error('Title is required.');
   }
-  if (!episodeData.videoUrl.trim()) {
-    throw new Error('Google Drive Public Video URL is required.');
+  if (!(episodeData.videoUrl || '').trim() && !(episodeData.botStreamUrl || '').trim()) {
+    throw new Error('Add at least one link: Drive link or Telegram bot stream link.');
   }
 
   const animeIdx = memoryAnimeCache.findIndex((a) => a.id === animeId);
@@ -1029,7 +1081,7 @@ export async function addEpisodeToAnime(
     throw new Error('Permission denied: You can only add episodes to your own anime folders.');
   }
 
-  const rawUrl = episodeData.videoUrl.trim();
+  const rawUrl = (episodeData.videoUrl || '').trim();
   const driveInfo = getGoogleDriveStreamInfo(rawUrl);
 
   const currentEpisodes: CloudEpisode[] = Array.isArray(currentAnime.episodes) ? currentAnime.episodes : [];
@@ -1038,6 +1090,7 @@ export async function addEpisodeToAnime(
     number: episodeData.number || currentEpisodes.length + 1,
     title: episodeData.title.trim(),
     videoUrl: rawUrl,
+    botStreamUrl: (episodeData.botStreamUrl || '').trim(),
     duration: episodeData.duration || '24m',
     thumbnail: driveInfo.thumbnailUrl || currentAnime.poster || '',
     releaseDate: new Date().toISOString()
@@ -1058,6 +1111,43 @@ export async function addEpisodeToAnime(
   } catch {}
 }
 
+// Add / replace / remove (pass null) the trailer of an anime folder.
+export async function setAnimeTrailer(
+  animeId: string,
+  trailer: Trailer | null,
+  currentStudioId: string,
+  isMasterOwner: boolean
+): Promise<void> {
+  await ensureCloudSignIn(isMasterOwner);
+  const animeIdx = memoryAnimeCache.findIndex((a) => a.id === animeId);
+  if (animeIdx === -1) throw new Error('Anime folder not found.');
+
+  const currentAnime = memoryAnimeCache[animeIdx];
+  if (!isMasterOwner && currentAnime.studioId !== currentStudioId) {
+    throw new Error('Permission denied: You can only edit trailers of your own folders.');
+  }
+
+  const clean = normalizeTrailer(trailer);
+  if (trailer && !clean) {
+    throw new Error('Add at least one link: Drive link or Telegram bot stream link.');
+  }
+
+  try {
+    await updateDoc(doc(db, 'anime', animeId), cleanForFirestore({ trailer: clean ?? null, updatedAt: new Date().toISOString() }));
+  } catch (err: any) {
+    console.error('Firestore trailer save failed:', err);
+    throw new Error(
+      err?.code === 'permission-denied'
+        ? 'Cloud save blocked by Firestore rules - Google sign-in pannitu thirumba try pannunga.'
+        : 'Cloud save failed. Check internet and try again.'
+    );
+  }
+
+  memoryAnimeCache[animeIdx] = { ...currentAnime, trailer: clean };
+  syncCachesToStorage();
+  notifyDataChanged();
+}
+
 export async function deleteEpisodeFromAnime(
   animeId: string,
   episodeId: string,
@@ -1065,7 +1155,7 @@ export async function deleteEpisodeFromAnime(
   isMasterOwner: boolean,
   currentStudioName?: string
 ): Promise<void> {
-  await ensureCloudSignIn();
+  await ensureCloudSignIn(isMasterOwner);
   const animeIdx = memoryAnimeCache.findIndex((a) => a.id === animeId);
   if (animeIdx === -1) {
     throw new Error('Anime not found.');
@@ -1090,7 +1180,7 @@ export async function deleteEpisodeFromAnime(
     console.error('Firestore episode delete failed:', err);
     throw new Error(
       err?.code === 'permission-denied'
-        ? 'Cloud delete blocked by Firestore rules - Google sign-in pannitu rules check pannunga.'
+        ? `Cloud delete blocked by Firestore rules. Signed in as: ${auth.currentUser?.email || 'nobody'} - indha email rules la isMaster() la irukkanu check pannunga.`
         : 'Cloud delete failed. Check internet and try again.'
     );
   }
@@ -1101,14 +1191,14 @@ export async function deleteEpisodeFromAnime(
   notifyDataChanged();
 }
 
-export async function deleteStudio(studioId: string, authorized = true): Promise<void> {
+export async function deleteStudio(studioId: string, authorized = true, isMasterOwner = false): Promise<void> {
   if (!authorized) {
     throw new Error('Authorized credentials required to delete studio.');
   }
 
   // 1. Delete from Firestore FIRST (studio doc + ALL its anime docs) so other
   //    users stop seeing it. Errors are surfaced instead of being swallowed.
-  await ensureCloudSignIn();
+  await ensureCloudSignIn(isMasterOwner);
   try {
     const studioName = memoryStudiosCache.find((s) => s.id === studioId)?.name;
     const queries = [getDocs(query(collection(db, 'anime'), where('studioId', '==', studioId)))];
@@ -1137,7 +1227,7 @@ export async function deleteStudio(studioId: string, authorized = true): Promise
     console.error('Firestore studio delete failed:', err);
     throw new Error(
       err?.code === 'permission-denied'
-        ? 'Cloud delete blocked by Firestore rules - sign in with Google and check rules, then try again.'
+        ? `Cloud delete blocked by Firestore rules. Signed in as: ${auth.currentUser?.email || 'nobody'} - indha email rules la isMaster() la irukkanu check pannunga.`
         : 'Cloud delete failed. Check internet and try again.'
     );
   }
@@ -1152,13 +1242,6 @@ export async function deleteStudio(studioId: string, authorized = true): Promise
 
   syncCachesToStorage();
   notifyDataChanged();
-}
-
-/**
- * Clean real-creators policy: No dummy data seeded.
- */
-export async function seedInitialFirestoreLibrary(): Promise<number> {
-  return 0;
 }
 
 // -------------------------------------------------------------
