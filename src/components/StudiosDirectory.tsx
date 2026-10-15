@@ -1,6 +1,18 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Building2, Award, Calendar, MapPin, CheckCircle, ArrowLeft, Instagram, Crown } from 'lucide-react';
+import {
+  Search,
+  Building2,
+  Award,
+  Calendar,
+  MapPin,
+  CheckCircle,
+  ArrowLeft,
+  Plus,
+  Instagram,
+  Crown
+} from 'lucide-react';
 import { Studio, Anime } from '../types';
+import { formatJoinDate } from '../data/labels';
 
 interface StudiosDirectoryProps {
   studios: Studio[];
@@ -8,7 +20,10 @@ interface StudiosDirectoryProps {
   selectedStudio: Studio | null;
   onSelectStudio: (studio: Studio | null) => void;
   onSelectAnime: (anime: Anime) => void;
+  onPlayAnime: (anime: Anime) => void;
   onRegisterStudio?: () => void;
+  onOpenBot?: () => void;
+  onOpenNewStudioModal?: () => void;
   ownerSession?: { isOwner: boolean; username: string } | null;
   studioSession?: { studioId: string; studioName: string } | null;
   onOpenOwnerDashboard?: () => void;
@@ -21,13 +36,16 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
   selectedStudio,
   onSelectStudio,
   onSelectAnime,
+  onPlayAnime,
   onRegisterStudio,
+  onOpenBot,
+  onOpenNewStudioModal,
   ownerSession,
   studioSession,
   onOpenOwnerDashboard,
   onOpenStudioDashboard
 }) => {
-  const handleRegisterStudio = onRegisterStudio;
+  const handleRegisterStudio = onRegisterStudio || onOpenNewStudioModal || onOpenBot;
   const [studioSearch, setStudioSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'TV Series' | 'Movie'>('all');
 
@@ -80,7 +98,7 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
         </div>
 
         {/* Studio Hero Profile Header */}
-        <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-surface shadow-2xl">
+        <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-[#0E121E] shadow-2xl">
           {/* Banner */}
           <div className="h-48 sm:h-64 lg:h-72 w-full relative bg-zinc-900">
             {selectedStudio.banner ? (
@@ -92,14 +110,14 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
             ) : (
               <div className="w-full h-full bg-gradient-to-r from-zinc-900 via-zinc-800 to-black" />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/60 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0E121E] via-[#0E121E]/60 to-transparent" />
           </div>
 
           {/* Profile Meta Bar */}
           <div className="relative px-6 sm:px-10 pb-8 -mt-16 sm:-mt-20 flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-end gap-5">
               {/* Studio Logo */}
-              <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-2xl overflow-hidden border-4 border-surface shadow-2xl bg-black flex-shrink-0 flex items-center justify-center">
+              <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-2xl overflow-hidden border-4 border-[#0E121E] shadow-2xl bg-black flex-shrink-0 flex items-center justify-center">
                 {selectedStudio.logo ? (
                   <img
                     src={selectedStudio.logo}
@@ -116,12 +134,12 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
               {/* Studio Title & Stats */}
               <div className="space-y-1.5">
                 <div className="flex items-center space-x-2">
-                  <h1 className="font-display text-3xl sm:text-5xl font-black text-white tracking-tight">
+                  <h1 className="font-syne text-3xl sm:text-5xl font-black text-white tracking-tight">
                     {selectedStudio.name}
                   </h1>
                   {selectedStudio.verified && (
                     <span title="Verified Official ZANFT Partner">
-                      <CheckCircle className="w-5 h-5 text-brand" />
+                      <CheckCircle className="w-5 h-5 text-[#E50914]" />
                     </span>
                   )}
                 </div>
@@ -135,14 +153,12 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
                   <span aria-hidden="true" className="text-zinc-600">·</span>
                   <span className="flex items-center space-x-1">
                     <Calendar className="w-3.5 h-3.5 text-zinc-500" />
-                    <span>Est. {selectedStudio.established}</span>
+                    <span className="text-zinc-300 font-bold">
+                      Studio Joined On: {formatJoinDate(selectedStudio.createdAt) ?? 'Date not available'}
+                    </span>
                   </span>
                   <span aria-hidden="true" className="text-zinc-600">·</span>
-                  <span className="text-zinc-300 font-bold">
-                    Studio Joined On: {new Date(selectedStudio.createdAt || '2025-01-01').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </span>
-                  <span aria-hidden="true" className="text-zinc-600">·</span>
-                  <span className="text-brand font-bold">{totalWorks} Productions on ZANFT</span>
+                  <span className="text-[#E50914] font-bold">{totalWorks} Productions on ZANFT</span>
                 </div>
               </div>
             </div>
@@ -177,7 +193,7 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
               {handleRegisterStudio && !studioSession && !ownerSession?.isOwner && (
                 <button
                   onClick={handleRegisterStudio}
-                  className="flex items-center space-x-2 bg-brand hover:bg-brand-deep text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-[0_0_15px_rgba(229,9,20,0.4)] transition-all cursor-pointer"
+                  className="flex items-center space-x-2 bg-[#E50914] hover:bg-[#B0000D] text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-[0_0_15px_rgba(229,9,20,0.4)] transition-all cursor-pointer"
                 >
                   <Building2 className="w-4 h-4" />
                   <span>Studio Portal & Uploads</span>
@@ -230,7 +246,7 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
                 onClick={() => setActiveFilter('all')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                   activeFilter === 'all'
-                    ? 'bg-brand text-white shadow'
+                    ? 'bg-[#E50914] text-white shadow'
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
@@ -240,7 +256,7 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
                 onClick={() => setActiveFilter('TV Series')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                   activeFilter === 'TV Series'
-                    ? 'bg-brand text-white shadow'
+                    ? 'bg-[#E50914] text-white shadow'
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
@@ -250,7 +266,7 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
                 onClick={() => setActiveFilter('Movie')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                   activeFilter === 'Movie'
-                    ? 'bg-brand text-white shadow'
+                    ? 'bg-[#E50914] text-white shadow'
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
@@ -266,7 +282,7 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
                 <div
                   key={anime.id}
                   onClick={() => onSelectAnime(anime)}
-                  className="group cursor-pointer bg-surface rounded-xl overflow-hidden border border-white/10 hover:border-brand/60 transition-all duration-300 hover:-translate-y-1 shadow-lg flex flex-col"
+                  className="group cursor-pointer bg-[#0E121E] rounded-xl overflow-hidden border border-white/10 hover:border-[#E50914]/60 transition-all duration-300 hover:-translate-y-1 shadow-lg flex flex-col"
                 >
                   <div className="aspect-[2/3] overflow-hidden relative bg-black">
                     {(anime.poster || anime.banner) ? (
@@ -280,14 +296,14 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
                         {anime.title}
                       </div>
                     )}
-                    <div className="absolute top-2 right-2 bg-brand text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
+                    <div className="absolute top-2 right-2 bg-[#E50914] text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
                       {anime.episodesCount} EPS
                     </div>
                   </div>
 
                   <div className="p-3 flex-1 flex flex-col justify-between space-y-1">
                     <div>
-                      <h3 className="text-sm font-bold text-white group-hover:text-brand transition-colors line-clamp-1">
+                      <h3 className="text-sm font-bold text-white group-hover:text-[#E50914] transition-colors line-clamp-1">
                         {anime.title}
                       </h3>
                       <p className="text-[11px] text-zinc-400 line-clamp-1">
@@ -316,6 +332,15 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
               <p className="text-zinc-400 text-sm">
                 No productions found under this filter for {selectedStudio.name}.
               </p>
+              {handleRegisterStudio && (
+                <button
+                  onClick={handleRegisterStudio}
+                  className="inline-flex items-center space-x-2 bg-[#E50914] hover:bg-[#B0000D] text-white px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Publish Anime to this Studio</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -331,17 +356,17 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
       {/* Page Title & Search Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-6">
         <div className="space-y-1.5">
-          <div className="flex items-center flex-wrap gap-2 text-brand text-xs font-bold uppercase tracking-widest">
+          <div className="flex items-center flex-wrap gap-2 text-[#E50914] text-xs font-bold uppercase tracking-widest">
             <div className="flex items-center space-x-1.5">
               <Building2 className="w-4 h-4" />
               <span>Fandub Studios</span>
             </div>
             <span className="text-zinc-600">•</span>
-            <span className="bg-brand/20 text-brand border border-brand/40 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold shadow-sm">
+            <span className="bg-[#E50914]/20 text-[#E50914] border border-[#E50914]/40 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold shadow-sm">
               Total {studios.length} {studios.length === 1 ? 'Studio' : 'Studios'} Registered
             </span>
           </div>
-          <h1 className="font-display text-3xl sm:text-5xl font-black text-white tracking-tight flex flex-wrap items-baseline gap-3">
+          <h1 className="font-syne text-3xl sm:text-5xl font-black text-white tracking-tight flex flex-wrap items-baseline gap-3">
             <span>Studios Directory</span>
             <span className="text-xs sm:text-sm font-sans font-medium text-zinc-300 bg-white/5 border border-white/10 px-3 py-1 rounded-full">
               Total <strong className="text-white font-extrabold">{studios.length}</strong> Studios
@@ -360,14 +385,14 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
             placeholder={`Search ${studios.length} studios by name, city...`}
             value={studioSearch}
             onChange={(e) => setStudioSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-surface border border-white/10 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-brand transition-colors"
+            className="w-full pl-10 pr-4 py-2.5 bg-[#0E121E] border border-white/10 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#E50914] transition-colors"
           />
         </div>
       </div>
 
       {/* Directory Grid Header */}
       <div className="flex items-center justify-between pt-2">
-        <h3 className="font-display text-base sm:text-lg font-bold text-white flex items-center space-x-2">
+        <h3 className="font-syne text-base sm:text-lg font-bold text-white flex items-center space-x-2">
           <span>All Fandub Studios</span>
           <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-white/10 text-white font-bold border border-white/10">
             {filteredStudios.length} {filteredStudios.length === 1 ? 'Studio' : 'Studios'}
@@ -377,7 +402,7 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
         {studioSearch.trim() && (
           <button
             onClick={() => setStudioSearch('')}
-            className="text-xs text-brand hover:underline cursor-pointer"
+            className="text-xs text-[#E50914] hover:underline cursor-pointer"
           >
             Reset Search ({studios.length} total studios)
           </button>
@@ -397,7 +422,7 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
             <div
               key={studio.id}
               onClick={() => onSelectStudio(studio)}
-              className="group cursor-pointer rounded-2xl overflow-hidden border border-white/10 bg-surface hover:border-brand/60 transition-all duration-300 hover:-translate-y-1 shadow-xl flex flex-col"
+              className="group cursor-pointer rounded-2xl overflow-hidden border border-white/10 bg-[#0E121E] hover:border-[#E50914]/60 transition-all duration-300 hover:-translate-y-1 shadow-xl flex flex-col"
             >
               {/* Studio Banner */}
               <div className="h-32 sm:h-36 w-full relative overflow-hidden bg-zinc-900">
@@ -410,7 +435,7 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
                 ) : (
                   <div className="w-full h-full bg-gradient-to-r from-zinc-900 via-zinc-800 to-black" />
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/40 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0E121E] via-[#0E121E]/40 to-transparent" />
               </div>
 
               {/* Studio Card Content */}
@@ -433,29 +458,27 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
                     </div>
 
                     <div className="text-right">
-                      <span className="text-xs font-bold text-brand block">
+                      <span className="text-xs font-bold text-[#E50914] block">
                         {worksCount} Titles
                       </span>
                       <span className="text-[10px] text-zinc-400 block font-mono">
-                        Studio Joined On: {new Date(studio.createdAt || '2025-01-01').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        Joined: {formatJoinDate(studio.createdAt) ?? 'Date not available'}
                       </span>
                     </div>
                   </div>
 
                   <div>
                     <div className="flex items-center space-x-1.5">
-                      <h3 className="font-display text-lg font-bold text-white group-hover:text-brand transition-colors">
+                      <h3 className="font-syne text-lg font-bold text-white group-hover:text-[#E50914] transition-colors">
                         {studio.name}
                       </h3>
                       {studio.verified && (
-                        <CheckCircle className="w-4 h-4 text-brand" />
+                        <CheckCircle className="w-4 h-4 text-[#E50914]" />
                       )}
                     </div>
                     <p className="text-[11px] text-zinc-400 flex items-center space-x-1 mt-0.5">
                       <MapPin className="w-3 h-3 text-zinc-500" />
                       <span>{studio.country}</span>
-                      <span>·</span>
-                      <span>Est. {studio.established}</span>
                     </p>
                   </div>
 
@@ -466,7 +489,7 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
 
                 <div className="pt-3 border-t border-white/5 flex items-center justify-between text-xs font-semibold text-zinc-300 group-hover:text-white">
                   <span>View Studio Portfolio</span>
-                  <span className="text-brand group-hover:translate-x-1 transition-transform">
+                  <span className="text-[#E50914] group-hover:translate-x-1 transition-transform">
                     →
                   </span>
                 </div>
@@ -478,10 +501,10 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
 
       {filteredStudios.length === 0 && (
         <div className="p-16 text-center rounded-3xl bg-white/5 border border-white/10 space-y-4 max-w-md mx-auto">
-          <div className="w-14 h-14 rounded-2xl bg-brand/10 border border-brand/30 flex items-center justify-center mx-auto text-brand">
+          <div className="w-14 h-14 rounded-2xl bg-[#E50914]/10 border border-[#E50914]/30 flex items-center justify-center mx-auto text-[#E50914]">
             <Building2 className="w-7 h-7" />
           </div>
-          <h4 className="font-display font-bold text-white text-lg">
+          <h4 className="font-syne font-bold text-white text-lg">
             {studioSearch.trim() ? 'No Studios Found' : 'No Studios Registered Yet'}
           </h4>
           <p className="text-zinc-400 text-xs leading-relaxed">
@@ -492,7 +515,7 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
           {handleRegisterStudio && (
             <button
               onClick={handleRegisterStudio}
-              className="px-6 py-2.5 rounded-xl bg-brand hover:bg-brand-deep text-white text-xs font-bold transition-all shadow-lg active:scale-95 cursor-pointer"
+              className="px-6 py-2.5 rounded-xl bg-[#E50914] hover:bg-[#B0000D] text-white text-xs font-bold transition-all shadow-lg active:scale-95 cursor-pointer"
             >
               Register Your Studio
             </button>

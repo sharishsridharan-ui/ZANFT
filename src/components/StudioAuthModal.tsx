@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
-import { Building2, X, AlertCircle, CheckCircle2, Crown, Eye, EyeOff } from 'lucide-react';
+import {
+  Building2,
+  X,
+  AlertCircle,
+  CheckCircle2,
+  Crown,
+  Eye,
+  EyeOff
+} from 'lucide-react';
 import {
   registerStudio,
   loginStudio,
@@ -250,22 +258,22 @@ export const StudioAuthModal: React.FC<StudioAuthModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200 overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-surface border border-white/15 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden my-auto">
+      <div className="relative w-full max-w-lg bg-[#0F111D] border border-white/15 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden my-auto">
         {/* Glow Header Accent */}
-        <div className="h-1.5 w-full bg-gradient-to-r from-brand via-[#FF5E62] to-brand" />
+        <div className="h-1.5 w-full bg-gradient-to-r from-[#E50914] via-[#FF5E62] to-[#E50914]" />
 
         {/* Modal Header */}
         <div className="flex items-center justify-between p-6 pb-4 border-b border-white/10">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-brand/20 border border-brand/40 flex items-center justify-center text-brand">
+            <div className="w-10 h-10 rounded-2xl bg-[#E50914]/20 border border-[#E50914]/40 flex items-center justify-center text-[#E50914]">
               {activeTab === 'owner' ? (
                 <Crown className="w-5 h-5 text-amber-400" />
               ) : (
-                <Building2 className="w-5 h-5 text-brand" />
+                <Building2 className="w-5 h-5 text-[#E50914]" />
               )}
             </div>
             <div>
-              <h2 className="font-display font-black text-white text-lg sm:text-xl tracking-tight">
+              <h2 className="font-syne font-black text-white text-lg sm:text-xl tracking-tight">
                 {activeTab === 'register' && 'Studio Registration'}
                 {activeTab === 'login' && 'Studio Creator Login'}
                 {activeTab === 'owner' && 'Master Owner Access'}
@@ -313,7 +321,7 @@ export const StudioAuthModal: React.FC<StudioAuthModalProps> = ({
             }}
             className={`flex-1 pb-3 transition-colors border-b-2 cursor-pointer ${
               activeTab === 'register'
-                ? 'border-brand text-brand'
+                ? 'border-[#E50914] text-[#E50914]'
                 : 'border-transparent text-zinc-400 hover:text-white'
             }`}
           >
@@ -327,7 +335,7 @@ export const StudioAuthModal: React.FC<StudioAuthModalProps> = ({
             }}
             className={`flex-1 pb-3 transition-colors border-b-2 cursor-pointer ${
               activeTab === 'login'
-                ? 'border-brand text-brand'
+                ? 'border-[#E50914] text-[#E50914]'
                 : 'border-transparent text-zinc-400 hover:text-white'
             }`}
           >
@@ -415,7 +423,7 @@ export const StudioAuthModal: React.FC<StudioAuthModalProps> = ({
 
               <div className="relative flex items-center justify-center my-2">
                 <div className="border-t border-white/10 w-full" />
-                <span className="bg-surface px-3 text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
+                <span className="bg-[#0F111D] px-3 text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
                   Studio Credentials
                 </span>
               </div>
@@ -433,7 +441,7 @@ export const StudioAuthModal: React.FC<StudioAuthModalProps> = ({
                     value={regStudioName}
                     onChange={(e) => setRegStudioName(e.target.value)}
                     placeholder="e.g. AnimeStudio, TamilFandub"
-                    className="w-full px-3.5 py-2.5 bg-black/50 border border-white/15 rounded-xl text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-brand transition-colors"
+                    className="w-full px-3.5 py-2.5 bg-black/50 border border-white/15 rounded-xl text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-[#E50914] transition-colors"
                   />
                 </div>
               </div>
@@ -449,7 +457,7 @@ export const StudioAuthModal: React.FC<StudioAuthModalProps> = ({
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
                     placeholder="At least 4 characters"
-                    className="w-full px-3.5 py-2.5 pr-10 bg-black/50 border border-white/15 rounded-xl text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-brand transition-colors"
+                    className="w-full px-3.5 py-2.5 pr-10 bg-black/50 border border-white/15 rounded-xl text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-[#E50914] transition-colors"
                   />
                   <button
                     type="button"
@@ -482,7 +490,7 @@ export const StudioAuthModal: React.FC<StudioAuthModalProps> = ({
                     className={`w-full px-3.5 py-2.5 pr-10 bg-black/50 border rounded-xl text-white text-xs placeholder-zinc-500 focus:outline-none transition-colors ${
                       regConfirmPassword && regPassword !== regConfirmPassword
                         ? 'border-red-500/80 focus:border-red-500'
-                        : 'border-white/15 focus:border-brand'
+                        : 'border-white/15 focus:border-[#E50914]'
                     }`}
                   />
                   <button
@@ -498,7 +506,7 @@ export const StudioAuthModal: React.FC<StudioAuthModalProps> = ({
               <button
                 type="submit"
                 disabled={loading || isCapacityFull}
-                className="w-full py-3 bg-gradient-to-r from-brand to-brand-deep hover:brightness-110 disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-lg shadow-brand/25 transition-all cursor-pointer mt-2"
+                className="w-full py-3 bg-gradient-to-r from-[#E50914] to-[#B0000D] hover:brightness-110 disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-lg shadow-[#E50914]/25 transition-all cursor-pointer mt-2"
               >
                 {loading ? 'Registering Studio...' : 'Complete Studio Registration'}
               </button>
@@ -540,7 +548,7 @@ export const StudioAuthModal: React.FC<StudioAuthModalProps> = ({
 
               <div className="relative flex items-center justify-center my-2">
                 <div className="border-t border-white/10 w-full" />
-                <span className="bg-surface px-3 text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
+                <span className="bg-[#0F111D] px-3 text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
                   Or Enter Credentials
                 </span>
               </div>
@@ -554,7 +562,7 @@ export const StudioAuthModal: React.FC<StudioAuthModalProps> = ({
                   value={loginIdentifier}
                   onChange={(e) => setLoginIdentifier(e.target.value)}
                   placeholder="e.g. MappaTamil or email@gmail.com"
-                  className="w-full px-3.5 py-2.5 bg-black/50 border border-white/15 rounded-xl text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-brand transition-colors"
+                  className="w-full px-3.5 py-2.5 bg-black/50 border border-white/15 rounded-xl text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-[#E50914] transition-colors"
                 />
               </div>
 
@@ -568,7 +576,7 @@ export const StudioAuthModal: React.FC<StudioAuthModalProps> = ({
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     placeholder="Enter your studio password"
-                    className="w-full px-3.5 py-2.5 pr-10 bg-black/50 border border-white/15 rounded-xl text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-brand transition-colors"
+                    className="w-full px-3.5 py-2.5 pr-10 bg-black/50 border border-white/15 rounded-xl text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-[#E50914] transition-colors"
                   />
                   <button
                     type="button"
@@ -583,7 +591,7 @@ export const StudioAuthModal: React.FC<StudioAuthModalProps> = ({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-brand hover:bg-brand-deep disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-lg shadow-brand/25 transition-all cursor-pointer mt-2"
+                className="w-full py-3 bg-[#E50914] hover:bg-[#B0000D] disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-lg shadow-[#E50914]/25 transition-all cursor-pointer mt-2"
               >
                 {loading ? 'Authenticating...' : 'Sign In to Studio Portal'}
               </button>

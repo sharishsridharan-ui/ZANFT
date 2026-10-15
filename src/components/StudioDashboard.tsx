@@ -1,5 +1,27 @@
 import React, { useState, useRef } from 'react';
-import { Building2, Plus, Film, Tv, Trash2, Edit3, Video, X, Sparkles, CheckCircle2, AlertCircle, LogOut, Play, Image as ImageIcon, Check, ArrowRight, MapPin, Monitor, Smartphone, AlertTriangle } from 'lucide-react';
+import {
+  Building2,
+  Plus,
+  Film,
+  Tv,
+  Trash2,
+  Edit3,
+  Video,
+  X,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  LogOut,
+  Play,
+  Image as ImageIcon,
+  Check,
+  ArrowRight,
+  MapPin,
+  Monitor,
+  Smartphone,
+  AlertTriangle,
+  Clapperboard
+} from 'lucide-react';
 import {
   CloudStudio,
   CloudAnime,
@@ -10,10 +32,21 @@ import {
   addEpisodeToAnime,
   deleteEpisodeFromAnime,
   updateStudioProfile,
-  deleteStudio
+  deleteStudio,
+  setAnimeTrailer
 } from '../services/firestoreService';
-import { StudioSession } from '../types';
+import { StudioSession, Trailer } from '../types';
 import { getGoogleDriveStreamInfo } from '../firebase';
+import { countText, formatJoinDate } from '../data/labels';
+import {
+  StreamLinkFields,
+  TrailerStepFields,
+  TrailerEditorModal,
+  emptyTrailerDraft,
+  draftToTrailer,
+  TrailerMode,
+  TrailerDraft
+} from './StreamLinkFields';
 
 export const PREDEFINED_GENRES = [
   'Action',
@@ -167,6 +200,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
 
   // Studio Edit Details State
   const [studioName, setStudioName] = useState(currentStudio?.name || session.studioName);
+  const [studioPassword, setStudioPassword] = useState('');
   const [logoUrl, setLogoUrl] = useState(currentStudio?.logo || session.logo || '');
   const [pcBannerUrl, setPcBannerUrl] = useState(currentStudio?.banner || session.banner || '');
   const [mobileBannerUrl, setMobileBannerUrl] = useState(currentStudio?.mobileBanner || session.mobileBanner || '');
@@ -195,10 +229,11 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
   // Step 1: Format ("Series" vs "Movie")
   // Step 2: Details & Dual Posters (Landscape 16:9 + Portrait 2:3)
   // Step 3: Initial Episode & Drive Stream Link
-  const [createStep, setCreateStep] = useState<1 | 2 | 3>(1);
+  const [createStep, setCreateStep] = useState<1 | 2 | 3 | 4>(1);
   const [folderType, setFolderType] = useState<'Series' | 'Movie'>('Series');
   const [folderTitle, setFolderTitle] = useState('');
   const [selectedGenres, setSelectedGenres] = useState<string[]>(['Action', 'Fantasy']);
+  const [customGenreInput, setCustomGenreInput] = useState('');
   const [folderSynopsis, setFolderSynopsis] = useState('');
 
   // Dual Posters for Creation:
@@ -212,13 +247,18 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
   // Initial Episode Details for Folder Creation
   const [epNumber, setEpNumber] = useState<number>(1);
   const [epTitle, setEpTitle] = useState('');
-  const [epVideoUrl, setEpVideoUrl] = useState('');
+  const [epVideoUrl, setEpVideoUrl] = useState(''); // Drive link
+  const [epBotUrl, setEpBotUrl] = useState(''); // Telegram bot stream link
+  const [trailerMode, setTrailerMode] = useState<TrailerMode>('now');
+  const [trailerDraft, setTrailerDraft] = useState<TrailerDraft>(emptyTrailerDraft);
+  const [trailerTarget, setTrailerTarget] = useState<CloudAnime | null>(null);
   const [epDuration, setEpDuration] = useState('24m');
 
   // Single Episode Add Modal (for existing folders)
   const [singleEpNumber, setSingleEpNumber] = useState<number>(1);
   const [singleEpTitle, setSingleEpTitle] = useState('');
-  const [singleEpVideoUrl, setSingleEpVideoUrl] = useState('');
+  const [singleEpVideoUrl, setSingleEpVideoUrl] = useState(''); // Drive link
+  const [singleEpBotUrl, setSingleEpBotUrl] = useState(''); // Telegram bot stream link
   const [singleEpDuration, setSingleEpDuration] = useState('24m');
 
   // In-App Delete Confirmation State
@@ -323,18 +363,30 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
     );
   };
 
+  const handleAddCustomGenre = () => {
+    const trimmed = customGenreInput.trim();
+    if (trimmed && !selectedGenres.includes(trimmed)) {
+      setSelectedGenres((prev) => [...prev, trimmed]);
+      setCustomGenreInput('');
+    }
+  };
+
   // Open "Create Folder" flow
   const handleOpenCreateFolder = () => {
     setCreateStep(1);
     setFolderType('Series');
     setFolderTitle('');
     setSelectedGenres(['Action', 'Fantasy']);
+    setCustomGenreInput('');
     setFolderSynopsis('');
     setFolderPoster('');
     setFolderBanner('');
     setEpNumber(1);
     setEpTitle('');
     setEpVideoUrl('');
+    setEpBotUrl('');
+    setTrailerMode('now');
+    setTrailerDraft(emptyTrailerDraft);
     setEpDuration('24m');
     setIsCreateFolderOpen(true);
   };
@@ -359,6 +411,10 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
       bio: studioBio.trim(),
       theme: studioTheme
     };
+
+    if (studioPassword.trim()) {
+      updatedProfileData.password = studioPassword.trim();
+    }
 
     const updatedSession: StudioSession = {
       ...session,
@@ -424,8 +480,8 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
       showNotification('Please select at least one genre.', true);
       return;
     }
-    if (!epVideoUrl.trim()) {
-      showNotification('Public video stream URL is required.', true);
+    if (!epVideoUrl.trim() && !epBotUrl.trim()) {
+      showNotification('Add at least one link: Drive link or Telegram bot stream link.', true);
       return;
     }
 
@@ -447,14 +503,16 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
             number: epNumber,
             title: epTitle.trim() || (folderType === 'Movie' ? 'Full Movie' : `Episode ${epNumber}`),
             videoUrl: epVideoUrl.trim(),
+            botStreamUrl: epBotUrl.trim(),
             duration: epDuration.trim() || (folderType === 'Movie' ? '1h 45m' : '24m')
-          }
+          },
+          trailer: trailerMode === 'now' ? draftToTrailer(trailerDraft) : null
         },
         session.studioId,
         session.studioName
       );
 
-      showNotification(`Anime folder "${folderTitle}" published successfully with Episode 1!`);
+      showNotification(`Anime folder "${folderTitle}" published successfully with ${folderType === 'Movie' ? 'Movie' : 'Episode'} ${epNumber}!`);
       setIsCreateFolderOpen(false);
     } catch (err: any) {
       showNotification(err.message || 'Unable to create anime folder.', true);
@@ -514,8 +572,12 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
   const handleAddSingleEpisode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAnimeForEpisode) return;
-    if (!singleEpTitle.trim() || !singleEpVideoUrl.trim()) {
-      showNotification('Episode title and video stream URL are required.', true);
+    if (!singleEpTitle.trim()) {
+      showNotification('Title is required.', true);
+      return;
+    }
+    if (!singleEpVideoUrl.trim() && !singleEpBotUrl.trim()) {
+      showNotification('Add at least one link: Drive link or Telegram bot stream link.', true);
       return;
     }
 
@@ -527,15 +589,31 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
           number: Number(singleEpNumber),
           title: singleEpTitle.trim(),
           videoUrl: singleEpVideoUrl.trim(),
+          botStreamUrl: singleEpBotUrl.trim(),
           duration: singleEpDuration.trim()
         },
         session.studioId,
         false
       );
-      showNotification(`Episode ${singleEpNumber} added successfully!`);
+      showNotification(`${selectedAnimeForEpisode.type === 'Movie' ? 'Movie' : 'Episode'} ${singleEpNumber} added successfully!`);
       setSelectedAnimeForEpisode(null);
     } catch (err: any) {
       showNotification(err.message || 'Unable to add episode.', true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Add / edit / remove the trailer of an existing folder
+  const handleSaveTrailer = async (trailer: Trailer | null) => {
+    if (!trailerTarget) return;
+    setLoading(true);
+    try {
+      await setAnimeTrailer(trailerTarget.id, trailer, session.studioId, false);
+      showNotification(trailer ? 'Trailer saved.' : 'Trailer removed.');
+      setTrailerTarget(null);
+    } catch (err: any) {
+      showNotification(err.message || 'Unable to save trailer.', true);
     } finally {
       setLoading(false);
     }
@@ -561,18 +639,16 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
     }
   };
 
-  const drivePreview = getGoogleDriveStreamInfo(epVideoUrl);
-  const singleDrivePreview = getGoogleDriveStreamInfo(singleEpVideoUrl);
 
   const seriesCount = myAnimeList.filter((a) => a.type === 'Series').length;
   const moviesCount = myAnimeList.filter((a) => a.type === 'Movie').length;
   const totalEpisodes = myAnimeList.reduce((acc, a) => acc + (a.episodes?.length || 0), 0);
 
   return (
-    <div className="min-h-screen bg-ink text-zinc-100 pt-20 pb-28 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-[#07080F] text-[#F3F4F6] pt-20 pb-28 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
       {/* Studio Cover Banner & Profile Card */}
       <div
-        className="relative rounded-3xl overflow-hidden border border-white/10 bg-surface shadow-2xl transition-all duration-300"
+        className="relative rounded-3xl overflow-hidden border border-white/10 bg-[#0E101D] shadow-2xl transition-all duration-300"
         style={{
           boxShadow: `0 10px 40px -10px ${activeTheme.glowRgba}`
         }}
@@ -586,9 +662,21 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-r from-surface via-surface-raised to-ink-deep opacity-80" />
+            <div className="w-full h-full bg-gradient-to-r from-[#0e101d] via-[#15192d] to-[#0a0c16] opacity-80" />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/50 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0E101D] via-[#0E101D]/50 to-transparent" />
+
+          {/* Clean Edit Option on Banner Top Right (No standalone banner button) */}
+          <div className="absolute top-4 right-4 flex items-center">
+            <button
+              onClick={handleOpenProfileModal}
+              className="px-3.5 py-1.5 rounded-xl bg-black/60 hover:bg-black/85 backdrop-blur-md border border-white/20 text-white text-xs font-bold flex items-center space-x-1.5 shadow-lg transition-all cursor-pointer active:scale-95"
+              title="Edit studio details & banners"
+            >
+              <Edit3 className="w-3.5 h-3.5" style={{ color: activeTheme.primary }} />
+              <span>Edit Details</span>
+            </button>
+          </div>
         </div>
 
         {/* Profile Info Bar */}
@@ -599,7 +687,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
               <div
                 onClick={handleOpenProfileModal}
                 title="Click to update studio logo"
-                className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border-4 border-surface shadow-2xl bg-black cursor-pointer group"
+                className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border-4 border-[#0E101D] shadow-2xl bg-black cursor-pointer group"
                 style={{
                   boxShadow: `0 0 25px ${activeTheme.glowRgba}`
                 }}
@@ -624,7 +712,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
             {/* Studio Identity Details */}
             <div className="space-y-1.5 flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight break-words">
+                <h1 className="font-syne text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight break-words">
                   {currentStudio?.name || session.studioName}
                 </h1>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold inline-flex items-center space-x-1">
@@ -643,11 +731,11 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   <span>{activeTheme.name}</span>
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-white/5 text-zinc-300 border border-white/10 text-[10px] font-semibold inline-flex items-center space-x-1">
-                  <MapPin className="w-3 h-3 text-brand" />
+                  <MapPin className="w-3 h-3 text-[#E50914]" />
                   <span>{currentStudio?.location || session.location || 'International'}</span>
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-white/5 text-zinc-300 border border-white/10 text-[10px] font-medium inline-flex items-center space-x-1 font-mono">
-                  <span>Joined {new Date(currentStudio?.createdAt || session.createdAt || '2025-01-01').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  <span>Joined {formatJoinDate(currentStudio?.createdAt || session.createdAt) ?? 'Date not available'}</span>
                 </span>
               </div>
               <p className="text-xs text-zinc-300 max-w-xl line-clamp-2 leading-relaxed">
@@ -713,11 +801,11 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Left Sidebar Control Card */}
         <div className="lg:col-span-1 space-y-4">
-          <div className="p-5 rounded-2xl bg-surface border border-white/10 space-y-4 shadow-xl">
+          <div className="p-5 rounded-2xl bg-[#0E101D] border border-white/10 space-y-4 shadow-xl">
             {/* Primary Action: Create New Folder */}
             <button
               onClick={handleOpenCreateFolder}
-              className="w-full py-3.5 px-4 bg-gradient-to-r from-brand to-brand-deep hover:brightness-110 text-white font-bold rounded-xl shadow-lg shadow-brand/30 text-xs flex items-center justify-center space-x-2 transition-all hover:scale-102 active:scale-98 cursor-pointer group"
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-[#E50914] to-[#B0000D] hover:brightness-110 text-white font-bold rounded-xl shadow-lg shadow-[#E50914]/30 text-xs flex items-center justify-center space-x-2 transition-all hover:scale-102 active:scale-98 cursor-pointer group"
             >
               <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center group-hover:rotate-90 transition-transform duration-300">
                 <Plus className="w-4 h-4 text-white" />
@@ -737,8 +825,8 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
           </div>
 
           {/* Quick Existing Folders List in Sidebar */}
-          <div className="p-4 rounded-2xl bg-surface border border-white/10 space-y-3">
-            <h4 className="font-display font-bold text-white text-xs flex items-center justify-between">
+          <div className="p-4 rounded-2xl bg-[#0E101D] border border-white/10 space-y-3">
+            <h4 className="font-syne font-bold text-white text-xs flex items-center justify-between">
               <span>Your Anime Folders</span>
               <span className="font-mono text-zinc-400">({myAnimeList.length})</span>
             </h4>
@@ -785,7 +873,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
         <div className="lg:col-span-3 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-display font-bold text-white text-lg sm:text-xl">
+              <h2 className="font-syne font-bold text-white text-lg sm:text-xl">
                 Studio Anime Library ({myAnimeList.length})
               </h2>
               <p className="text-xs text-zinc-400">
@@ -797,17 +885,24 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
           {myAnimeList.length === 0 ? (
             <div className="p-12 border-2 border-dashed border-white/10 rounded-3xl text-center space-y-3 bg-white/[0.01]">
               <Film className="w-12 h-12 mx-auto text-zinc-600" />
-              <h3 className="font-display font-bold text-white text-base">Your Studio Library is Empty</h3>
+              <h3 className="font-syne font-bold text-white text-base">Your Studio Library is Empty</h3>
               <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                Use &quot;Create New Folder&quot; to add a TV Series or Movie and upload dual posters for PC & Mobile!
+                Click &quot;Create New Folder&quot; to add a TV Series or Movie and upload dual posters for PC & Mobile!
               </p>
+              <button
+                onClick={handleOpenCreateFolder}
+                className="inline-flex items-center space-x-2 px-5 py-2.5 bg-[#E50914] text-white text-xs font-bold rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create New Anime Folder</span>
+              </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {myAnimeList.map((anime) => (
                 <div
                   key={anime.id}
-                  className="rounded-2xl border border-white/10 bg-surface p-4 flex flex-col justify-between space-y-4 hover:border-white/20 transition-all shadow-xl"
+                  className="rounded-2xl border border-white/10 bg-[#0E101D] p-4 flex flex-col justify-between space-y-4 hover:border-white/20 transition-all shadow-xl"
                 >
                   <div className="flex gap-3.5">
                     {/* Vertical Poster Preview */}
@@ -834,7 +929,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                     {/* Meta Details */}
                     <div className="flex-1 min-w-0 space-y-1.5">
                       <div className="flex items-start justify-between gap-1">
-                        <h3 className="font-display font-bold text-white text-sm sm:text-base leading-snug truncate">
+                        <h3 className="font-syne font-bold text-white text-sm sm:text-base leading-snug truncate">
                           {anime.title}
                         </h3>
                         <div className="flex items-center space-x-1 flex-shrink-0">
@@ -871,7 +966,17 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                       </p>
 
                       <div className="pt-1 flex items-center justify-between text-xs text-zinc-400">
-                        <span>{anime.episodes?.length || 0} Episodes published</span>
+                        <span>{countText(anime, anime.episodes?.length || 0)} published</span>
+                        <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setTrailerTarget(anime)}
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-bold text-zinc-300 hover:text-white cursor-pointer"
+                          title={anime.trailer ? 'Edit or remove trailer' : 'Add trailer'}
+                        >
+                          <Clapperboard className="w-3.5 h-3.5" />
+                          <span>Trailer</span>
+                          {anime.trailer && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+                        </button>
                         <button
                           onClick={() => {
                             setSelectedAnimeForEpisode(anime);
@@ -879,13 +984,15 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                             setSingleEpNumber(nextNum);
                             setSingleEpTitle(anime.type === 'Movie' ? 'Feature Film' : `Episode ${nextNum}`);
                             setSingleEpVideoUrl('');
+                            setSingleEpBotUrl('');
                             setSingleEpDuration(anime.type === 'Movie' ? '1h 45m' : '24m');
                           }}
-                          className="inline-flex items-center gap-2 whitespace-nowrap text-xs font-bold text-brand hover:text-red-400 cursor-pointer"
+                          className="inline-flex items-center gap-2 whitespace-nowrap text-xs font-bold text-[#E50914] hover:text-red-400 cursor-pointer"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Add Episode</span>
+                          <span>Add {anime.type === 'Movie' ? 'Movie' : 'Episode'}</span>
                         </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -893,12 +1000,12 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   {/* Episodes List */}
                   <div className="pt-2 border-t border-white/10 space-y-2">
                     <span className="text-[11px] font-semibold text-zinc-400 block">
-                      Video Streaming Episodes ({anime.episodes?.length || 0}):
+                      Video Streaming {anime.type === 'Movie' ? 'Movies' : 'Episodes'} ({anime.episodes?.length || 0}):
                     </span>
 
                     {(!anime.episodes || anime.episodes.length === 0) ? (
                       <p className="text-xs text-zinc-500 italic py-1">
-                        No episodes added yet. Click &quot;Add Episode&quot; to attach your video stream.
+                        No {anime.type === 'Movie' ? 'movies' : 'episodes'} added yet. Click &quot;Add {anime.type === 'Movie' ? 'Movie' : 'Episode'}&quot; to attach your video stream.
                       </p>
                     ) : (
                       <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
@@ -911,7 +1018,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                               className="flex items-center justify-between gap-4 p-3 rounded-lg bg-slate-900/60 border border-white/5 text-xs hover:border-white/15 transition-all"
                             >
                               <div className="flex items-center space-x-2.5 min-w-0">
-                                <span className="font-mono font-bold text-brand w-6 text-center">
+                                <span className="font-mono font-bold text-[#E50914] w-6 text-center">
                                   #{ep.number}
                                 </span>
                                 {epThumb && epThumb.trim() !== '' && (
@@ -948,7 +1055,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                                     type: 'episode',
                                     animeId: anime.id,
                                     episodeId: ep.id,
-                                    title: `${anime.title} - Episode ${ep.number}: ${ep.title}`
+                                    title: `${anime.title} - ${anime.type === 'Movie' ? 'Movie' : 'Episode'} ${ep.number}: ${ep.title}`
                                   })}
                                   className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-white transition-colors cursor-pointer"
                                   title="Delete Episode"
@@ -974,19 +1081,19 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
       {/* ========================================================= */}
       {isCreateFolderOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200 overflow-y-auto">
-          <div className="relative w-full max-w-2xl bg-surface border border-white/15 rounded-3xl shadow-2xl p-6 space-y-5 my-auto max-h-[92vh] flex flex-col overflow-hidden">
+          <div className="relative w-full max-w-2xl bg-[#0E101D] border border-white/15 rounded-3xl shadow-2xl p-6 space-y-5 my-auto max-h-[92vh] flex flex-col overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between pb-3 border-b border-white/10 flex-shrink-0">
               <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-xl bg-brand/20 border border-brand/40 flex items-center justify-center text-brand">
+                <div className="w-8 h-8 rounded-xl bg-[#E50914]/20 border border-[#E50914]/40 flex items-center justify-center text-[#E50914]">
                   <Plus className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-display font-bold text-white text-base sm:text-lg">
+                  <h3 className="font-syne font-bold text-white text-base sm:text-lg">
                     Create New Anime Folder
                   </h3>
                   <p className="text-xs text-zinc-400">
-                    Step {createStep} of 3: {createStep === 1 ? 'Format Selection' : createStep === 2 ? 'Details & Dual Posters' : 'Attach First Episode'}
+                    Step {createStep} of 4: {createStep === 1 ? 'Format Selection' : createStep === 2 ? 'Details & Dual Posters' : createStep === 3 ? 'Trailer' : `Attach First ${folderType === 'Movie' ? 'Movie' : 'Episode'}`}
                   </p>
                 </div>
               </div>
@@ -1040,15 +1147,15 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                     onClick={() => setFolderType('Series')}
                     className={`p-4 rounded-2xl border cursor-pointer transition-all space-y-2 ${
                       folderType === 'Series'
-                        ? 'bg-brand/20 border-brand shadow-lg shadow-brand/20'
+                        ? 'bg-[#E50914]/20 border-[#E50914] shadow-lg shadow-[#E50914]/20'
                         : 'bg-black/40 border-white/10 hover:border-white/20'
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <Tv className={`w-6 h-6 ${folderType === 'Series' ? 'text-brand' : 'text-zinc-400'}`} />
-                      {folderType === 'Series' && <Check className="w-4 h-4 text-brand" />}
+                      <Tv className={`w-6 h-6 ${folderType === 'Series' ? 'text-[#E50914]' : 'text-zinc-400'}`} />
+                      {folderType === 'Series' && <Check className="w-4 h-4 text-[#E50914]" />}
                     </div>
-                    <h4 className="font-display font-bold text-white text-base">TV Series</h4>
+                    <h4 className="font-syne font-bold text-white text-base">TV Series</h4>
                     <p className="text-xs text-zinc-400 leading-relaxed">
                       Multiple episodes, seasons & sequential Google Drive links.
                     </p>
@@ -1058,15 +1165,15 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                     onClick={() => setFolderType('Movie')}
                     className={`p-4 rounded-2xl border cursor-pointer transition-all space-y-2 ${
                       folderType === 'Movie'
-                        ? 'bg-brand/20 border-brand shadow-lg shadow-brand/20'
+                        ? 'bg-[#E50914]/20 border-[#E50914] shadow-lg shadow-[#E50914]/20'
                         : 'bg-black/40 border-white/10 hover:border-white/20'
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <Film className={`w-6 h-6 ${folderType === 'Movie' ? 'text-brand' : 'text-zinc-400'}`} />
-                      {folderType === 'Movie' && <Check className="w-4 h-4 text-brand" />}
+                      <Film className={`w-6 h-6 ${folderType === 'Movie' ? 'text-[#E50914]' : 'text-zinc-400'}`} />
+                      {folderType === 'Movie' && <Check className="w-4 h-4 text-[#E50914]" />}
                     </div>
-                    <h4 className="font-display font-bold text-white text-base">Theatrical Movie</h4>
+                    <h4 className="font-syne font-bold text-white text-base">Theatrical Movie</h4>
                     <p className="text-xs text-zinc-400 leading-relaxed">
                       Single standalone feature film or cinematic special broadcast.
                     </p>
@@ -1077,7 +1184,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   <button
                     type="button"
                     onClick={() => setCreateStep(2)}
-                    className="flex items-center space-x-2 px-5 py-2.5 bg-brand hover:bg-brand-deep text-white font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer"
+                    className="flex items-center space-x-2 px-5 py-2.5 bg-[#E50914] hover:bg-[#B0000D] text-white font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer"
                   >
                     <span>Next: Dual Posters & Details</span>
                     <ArrowRight className="w-4 h-4" />
@@ -1097,7 +1204,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                     value={folderTitle}
                     onChange={(e) => setFolderTitle(e.target.value)}
                     placeholder="e.g. Solo Leveling Tamil Dub, Bleach, etc."
-                    className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-brand"
+                    className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-[#E50914]"
                   />
                 </div>
 
@@ -1114,7 +1221,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                       {selectedGenres.map((genre) => (
                         <span
                           key={genre}
-                          className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-brand text-white text-xs font-bold shadow-sm"
+                          className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-[#E50914] text-white text-xs font-bold shadow-sm"
                         >
                           <span>{genre}</span>
                           <button
@@ -1139,7 +1246,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                           onClick={() => toggleGenre(genre)}
                           className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer flex items-center space-x-1 ${
                             isSelected
-                              ? 'bg-brand text-white border border-brand'
+                              ? 'bg-[#E50914] text-white border border-[#E50914]'
                               : 'bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/10'
                           }`}
                         >
@@ -1156,7 +1263,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="font-bold text-white text-xs flex items-center space-x-1.5">
-                        <ImageIcon className="w-4 h-4 text-brand" />
+                        <ImageIcon className="w-4 h-4 text-[#E50914]" />
                         <span>Responsive Dual Poster Uploads</span>
                       </h4>
                       <p className="text-[11px] text-zinc-400">
@@ -1221,7 +1328,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-zinc-200 text-xs flex items-center space-x-1">
-                            <Smartphone className="w-3.5 h-3.5 text-brand" />
+                            <Smartphone className="w-3.5 h-3.5 text-[#E50914]" />
                             <span>Option B: 2:3 Portrait Poster</span>
                           </span>
                           <span className="px-2 py-0.5 rounded-md bg-red-500/15 text-red-300 text-[10px] font-bold">
@@ -1249,7 +1356,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                           onClick={() => createPortraitPosterFileInputRef.current?.click()}
                           className="aspect-[2/3] max-h-36 mx-auto w-24 rounded-xl border-2 border-dashed border-white/20 hover:border-red-500/80 bg-zinc-900/60 hover:bg-zinc-900 transition-all flex flex-col items-center justify-center text-center p-2 cursor-pointer group"
                         >
-                          <Smartphone className="w-5 h-5 text-brand group-hover:scale-110 transition-transform mb-1" />
+                          <Smartphone className="w-5 h-5 text-[#E50914] group-hover:scale-110 transition-transform mb-1" />
                           <span className="font-bold text-white text-[10px]">Upload 2:3 Poster</span>
                           <span className="text-[9px] text-zinc-500">Device Gallery</span>
                         </div>
@@ -1261,7 +1368,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                           value={folderPoster}
                           onChange={(e) => setFolderPoster(e.target.value)}
                           placeholder="2:3 Portrait Poster Image URL..."
-                          className="flex-1 px-2.5 py-1.5 bg-black/40 border border-white/10 rounded-lg text-white text-[10px] focus:outline-none focus:border-brand"
+                          className="flex-1 px-2.5 py-1.5 bg-black/40 border border-white/10 rounded-lg text-white text-[10px] focus:outline-none focus:border-[#E50914]"
                         />
                       </div>
                     </div>
@@ -1275,7 +1382,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                     value={folderSynopsis}
                     onChange={(e) => setFolderSynopsis(e.target.value)}
                     placeholder="Enter storyline, voice cast, and fan dub production summary..."
-                    className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-xs focus:outline-none focus:border-brand"
+                    className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-xs focus:outline-none focus:border-[#E50914]"
                   />
                 </div>
 
@@ -1296,9 +1403,9 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                       }
                       setCreateStep(3);
                     }}
-                    className="flex items-center space-x-2 px-5 py-2.5 bg-brand hover:bg-brand-deep text-white font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer"
+                    className="flex items-center space-x-2 px-5 py-2.5 bg-[#E50914] hover:bg-[#B0000D] text-white font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer"
                   >
-                    <span>Next: Attach First Episode</span>
+                    <span>Next: Trailer</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -1307,64 +1414,13 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
 
             {/* STEP 3: Initial Episode & Drive Video URL */}
             {createStep === 3 && (
-              <form onSubmit={handleCreateFolderSubmit} className="space-y-4 py-2 text-xs">
-                <div className="p-3 bg-black/40 rounded-2xl border border-white/10 text-[11px] text-zinc-300">
-                  <span className="font-bold text-white">Google Drive Video Streaming:</span>
-                  <p className="text-zinc-400 mt-0.5">
-                    Public Google Drive video share link kudunga. Direct Sakuga HD player-la stream aagum!
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="font-semibold text-zinc-300">Episode #</label>
-                    <input
-                      type="number"
-                      required
-                      min={1}
-                      value={epNumber}
-                      onChange={(e) => setEpNumber(Number(e.target.value))}
-                      className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-brand"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="font-semibold text-zinc-300">Episode Title</label>
-                    <input
-                      type="text"
-                      required
-                      value={epTitle}
-                      onChange={(e) => setEpTitle(e.target.value)}
-                      placeholder={folderType === 'Movie' ? 'Full Theatrical Cut' : 'Episode 1: Thodakkam'}
-                      className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-brand"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-semibold text-zinc-300">Google Drive Public Video Link</label>
-                  <input
-                    type="text"
-                    required
-                    value={epVideoUrl}
-                    onChange={(e) => setEpVideoUrl(e.target.value)}
-                    placeholder="https://drive.google.com/file/d/.../view or Drive file ID"
-                    className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm font-mono focus:outline-none focus:border-brand"
-                  />
-                </div>
-
-                {drivePreview.isDrive && (
-                  <div className="p-3.5 bg-black/60 rounded-2xl border border-emerald-500/40 space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2 text-emerald-400 font-bold text-xs">
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>Google Drive Video Link Verified</span>
-                      </div>
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
-                        Stream Ready
-                      </span>
-                    </div>
-                  </div>
-                )}
+              <div className="space-y-4 py-2 text-xs">
+                <TrailerStepFields
+                  mode={trailerMode}
+                  onModeChange={setTrailerMode}
+                  draft={trailerDraft}
+                  onDraftChange={setTrailerDraft}
+                />
 
                 <div className="flex justify-between pt-2">
                   <button
@@ -1375,9 +1431,69 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                     Back
                   </button>
                   <button
+                    type="button"
+                    onClick={() => {
+                      if (trailerMode === 'now' && !draftToTrailer(trailerDraft)) {
+                        showNotification('Trailer link add pannunga, illana "Maybe Later" select pannunga.', true);
+                        return;
+                      }
+                      setCreateStep(4);
+                    }}
+                    className="flex items-center space-x-2 px-5 py-2.5 bg-[#E50914] hover:bg-[#B0000D] text-white font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer"
+                  >
+                    <span>Next: Attach First {folderType === 'Movie' ? 'Movie' : 'Episode'}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {createStep === 4 && (
+              <form onSubmit={handleCreateFolderSubmit} className="space-y-4 py-2 text-xs">
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="font-semibold text-zinc-300">{folderType === 'Movie' ? 'Movie #' : 'Episode #'}</label>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      value={epNumber}
+                      onChange={(e) => setEpNumber(Number(e.target.value))}
+                      className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-[#E50914]"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="font-semibold text-zinc-300">{folderType === 'Movie' ? 'Movie Title' : 'Episode Title'}</label>
+                    <input
+                      type="text"
+                      required
+                      value={epTitle}
+                      onChange={(e) => setEpTitle(e.target.value)}
+                      placeholder={folderType === 'Movie' ? 'Full Theatrical Cut' : 'Episode 1: Thodakkam'}
+                      className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-[#E50914]"
+                    />
+                  </div>
+                </div>
+
+                <StreamLinkFields
+                  driveUrl={epVideoUrl}
+                  botUrl={epBotUrl}
+                  onDriveChange={setEpVideoUrl}
+                  onBotChange={setEpBotUrl}
+                />
+
+                <div className="flex justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setCreateStep(3)}
+                    className="px-4 py-2 bg-white/5 text-zinc-300 rounded-xl hover:bg-white/10 cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button
                     type="submit"
                     disabled={loading}
-                    className="flex items-center space-x-2 px-6 py-2.5 bg-brand hover:bg-brand-deep disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-lg shadow-brand/30 transition-all cursor-pointer"
+                    className="flex items-center space-x-2 px-6 py-2.5 bg-[#E50914] hover:bg-[#B0000D] disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-lg shadow-[#E50914]/30 transition-all cursor-pointer"
                   >
                     {loading ? (
                       <span>Creating Folder...</span>
@@ -1400,7 +1516,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
       {/* ========================================================= */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200 overflow-y-auto">
-          <div className="relative w-full max-w-2xl bg-surface border border-white/15 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden my-auto max-h-[92vh] flex flex-col">
+          <div className="relative w-full max-w-2xl bg-[#0F111D] border border-white/15 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden my-auto max-h-[92vh] flex flex-col">
             <div
               className="h-1.5 w-full transition-all duration-300"
               style={{ backgroundColor: previewTheme.primary }}
@@ -1415,7 +1531,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   <Building2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-display font-black text-white text-lg tracking-tight">
+                  <h3 className="font-syne font-black text-white text-lg tracking-tight">
                     Studio Details & Dual Banners Setup
                   </h3>
                   <p className="text-xs text-zinc-400">
@@ -1501,7 +1617,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
               <div className="space-y-1.5">
                 <label className="font-bold text-zinc-200 flex items-center justify-between text-xs">
                   <span className="flex items-center space-x-1.5">
-                    <MapPin className="w-4 h-4 text-brand" />
+                    <MapPin className="w-4 h-4 text-[#E50914]" />
                     <span>2. Studio Location / Oor</span>
                   </span>
                   <span className="text-[10px] text-zinc-400">Type or select below</span>
@@ -1523,7 +1639,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                         onClick={() => setStudioLocation(city)}
                         className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all cursor-pointer ${
                           studioLocation.toLowerCase() === city.toLowerCase()
-                            ? 'bg-brand text-white shadow-sm'
+                            ? 'bg-[#E50914] text-white shadow-sm'
                             : 'bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/10'
                         }`}
                       >
@@ -1773,17 +1889,29 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
         </div>
       )}
 
+      {trailerTarget && (
+        <TrailerEditorModal
+          key={trailerTarget.id}
+          animeTitle={trailerTarget.title}
+          initial={trailerTarget.trailer}
+          loading={loading}
+          onSave={(t) => handleSaveTrailer(t)}
+          onRemove={() => handleSaveTrailer(null)}
+          onClose={() => setTrailerTarget(null)}
+        />
+      )}
+
       {/* ========================================================= */}
       {/* MODAL 3: ADD SINGLE EPISODE (To an existing folder)       */}
       {/* ========================================================= */}
       {selectedAnimeForEpisode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md bg-surface border border-white/15 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
+          <div className="relative w-full max-w-md bg-[#0E101D] border border-white/15 rounded-3xl shadow-2xl p-6 space-y-4 text-xs">
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
               <div className="flex items-center space-x-2">
-                <Video className="w-5 h-5 text-brand" />
-                <h3 className="font-display font-bold text-white text-base">
-                  Add Episode: {selectedAnimeForEpisode.title}
+                <Video className="w-5 h-5 text-[#E50914]" />
+                <h3 className="font-syne font-bold text-white text-base">
+                  Add {selectedAnimeForEpisode.type === 'Movie' ? 'Movie' : 'Episode'}: {selectedAnimeForEpisode.title}
                 </h3>
               </div>
               <button
@@ -1797,7 +1925,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
             <form onSubmit={handleAddSingleEpisode} className="space-y-3.5">
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="font-semibold text-zinc-300">Ep #</label>
+                  <label className="font-semibold text-zinc-300">{selectedAnimeForEpisode.type === 'Movie' ? 'Movie #' : 'Ep #'}</label>
                   <input
                     type="number"
                     required
@@ -1808,7 +1936,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="font-semibold text-zinc-300">Episode Title</label>
+                  <label className="font-semibold text-zinc-300">{selectedAnimeForEpisode.type === 'Movie' ? 'Movie Title' : 'Episode Title'}</label>
                   <input
                     type="text"
                     required
@@ -1820,24 +1948,12 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="font-semibold text-zinc-300">Google Drive Public Video Link</label>
-                <input
-                  type="text"
-                  required
-                  value={singleEpVideoUrl}
-                  onChange={(e) => setSingleEpVideoUrl(e.target.value)}
-                  placeholder="https://drive.google.com/file/d/.../view or drive file ID"
-                  className="w-full px-3 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm font-mono focus:outline-none focus:border-brand"
-                />
-              </div>
-
-              {singleDrivePreview.isDrive && (
-                <div className="p-3 bg-black/60 rounded-2xl border border-emerald-500/40 text-[11px] text-emerald-400 font-bold flex items-center space-x-1.5">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Google Drive Link Verified & Ready to Stream!</span>
-                </div>
-              )}
+              <StreamLinkFields
+                driveUrl={singleEpVideoUrl}
+                botUrl={singleEpBotUrl}
+                onDriveChange={setSingleEpVideoUrl}
+                onBotChange={setSingleEpBotUrl}
+              />
 
               <div className="flex justify-end space-x-2 pt-2 border-t border-white/10">
                 <button
@@ -1850,9 +1966,9 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-5 py-2 bg-brand hover:bg-brand-deep disabled:opacity-50 text-white font-bold rounded-xl cursor-pointer"
+                  className="px-5 py-2 bg-[#E50914] hover:bg-[#B0000D] disabled:opacity-50 text-white font-bold rounded-xl cursor-pointer"
                 >
-                  {loading ? 'Adding...' : 'Add Episode'}
+                  {loading ? 'Adding...' : `Add ${selectedAnimeForEpisode.type === 'Movie' ? 'Movie' : 'Episode'}`}
                 </button>
               </div>
             </form>
@@ -1865,9 +1981,9 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
       {/* ========================================================= */}
       {editingAnime && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200 overflow-y-auto">
-          <div className="relative w-full max-w-xl bg-surface border border-white/15 rounded-3xl shadow-2xl p-6 space-y-4 text-xs my-auto max-h-[92vh] flex flex-col overflow-hidden">
+          <div className="relative w-full max-w-xl bg-[#0E101D] border border-white/15 rounded-3xl shadow-2xl p-6 space-y-4 text-xs my-auto max-h-[92vh] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between pb-3 border-b border-white/10 flex-shrink-0">
-              <h3 className="font-display font-bold text-white text-base">
+              <h3 className="font-syne font-bold text-white text-base">
                 Edit Folder: {editingAnime.title}
               </h3>
               <button
@@ -1916,7 +2032,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   required
                   value={folderTitle}
                   onChange={(e) => setFolderTitle(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-brand"
+                  className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-[#E50914]"
                 />
               </div>
 
@@ -1925,7 +2041,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                 <select
                   value={folderType}
                   onChange={(e) => setFolderType(e.target.value as 'Series' | 'Movie')}
-                  className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-brand"
+                  className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-[#E50914]"
                 >
                   <option value="Series">TV Series</option>
                   <option value="Movie">Theatrical Movie</option>
@@ -1944,7 +2060,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                         key={g}
                         onClick={() => toggleGenre(g)}
                         className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer flex items-center space-x-1 ${
-                          isSelected ? 'bg-brand text-white' : 'bg-white/5 text-zinc-300 border border-white/10'
+                          isSelected ? 'bg-[#E50914] text-white' : 'bg-white/5 text-zinc-300 border border-white/10'
                         }`}
                       >
                         {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
@@ -1997,7 +2113,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   <div className="p-3 rounded-2xl bg-black/60 border border-white/15 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-zinc-200 text-xs flex items-center space-x-1">
-                        <Smartphone className="w-3.5 h-3.5 text-brand" />
+                        <Smartphone className="w-3.5 h-3.5 text-[#E50914]" />
                         <span>Option B: Portrait (2:3)</span>
                       </span>
                       <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 text-[9px] font-bold">
@@ -2032,7 +2148,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   rows={2}
                   value={folderSynopsis}
                   onChange={(e) => setFolderSynopsis(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-xs focus:outline-none focus:border-brand"
+                  className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-xs focus:outline-none focus:border-[#E50914]"
                 />
               </div>
 
@@ -2066,7 +2182,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   <button
                     type="submit"
                     disabled={loading}
-                    className="px-5 py-2 bg-brand hover:bg-brand-deep disabled:opacity-50 text-white font-bold rounded-xl transition-all cursor-pointer"
+                    className="px-5 py-2 bg-[#E50914] hover:bg-[#B0000D] disabled:opacity-50 text-white font-bold rounded-xl transition-all cursor-pointer"
                   >
                     {loading ? 'Saving...' : 'Save Changes'}
                   </button>
@@ -2082,13 +2198,13 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
       {/* ========================================================= */}
       {deleteConfirmTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md bg-surface border border-red-500/40 rounded-3xl shadow-[0_0_50px_rgba(229,9,20,0.3)] p-6 space-y-4 text-xs">
+          <div className="relative w-full max-w-md bg-[#0E101D] border border-red-500/40 rounded-3xl shadow-[0_0_50px_rgba(229,9,20,0.3)] p-6 space-y-4 text-xs">
             <div className="flex items-center space-x-3 pb-3 border-b border-white/10">
               <div className="w-10 h-10 rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-500 flex-shrink-0 shadow-lg">
                 <Trash2 className="w-5 h-5" />
               </div>
               <div className="min-w-0">
-                <h3 className="font-display font-bold text-white text-base">
+                <h3 className="font-syne font-bold text-white text-base">
                   Delete Confirmation
                 </h3>
                 <p className="text-[11px] text-zinc-400">
@@ -2138,13 +2254,13 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
       {/* ========================================================= */}
       {isDeleteStudioModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md bg-surface border-2 border-red-500/60 rounded-3xl shadow-[0_0_60px_rgba(229,9,20,0.4)] p-6 space-y-4 text-xs">
+          <div className="relative w-full max-w-md bg-[#0F101A] border-2 border-red-500/60 rounded-3xl shadow-[0_0_60px_rgba(229,9,20,0.4)] p-6 space-y-4 text-xs">
             <div className="flex items-center space-x-3 pb-3 border-b border-red-500/20">
               <div className="w-12 h-12 rounded-2xl bg-red-500/20 border border-red-500/50 flex items-center justify-center text-red-500 flex-shrink-0 shadow-lg animate-pulse">
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-display font-black text-white text-base sm:text-lg">
+                <h3 className="font-syne font-black text-white text-base sm:text-lg">
                   Delete Studio Profile?
                 </h3>
                 <p className="text-[11px] text-red-400 font-semibold">

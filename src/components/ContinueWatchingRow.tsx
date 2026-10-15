@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { ChevronLeft, ChevronRight, Play, Info, X, Clock } from 'lucide-react';
 import { Anime, Episode, WatchProgress } from '../types';
+import { itemShortLabel } from '../data/labels';
 
 interface ContinueWatchingRowProps {
   progressList: WatchProgress[];
@@ -62,7 +63,7 @@ export const ContinueWatchingRow: React.FC<ContinueWatchingRowProps> = ({
       {/* Header */}
       <div className="px-4 sm:px-8 flex items-baseline justify-between">
         <div className="flex items-center space-x-2">
-          <span className="w-2 h-2 rounded-full bg-brand animate-ping" />
+          <span className="w-2 h-2 rounded-full bg-[#E50914] animate-ping" />
           <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-white tracking-wide">
             Continue Watching
           </h2>
@@ -75,7 +76,7 @@ export const ContinueWatchingRow: React.FC<ContinueWatchingRowProps> = ({
       <div className="relative">
         <button
           onClick={() => handleScroll('left')}
-          className="absolute left-0 top-0 bottom-0 z-30 w-10 sm:w-12 bg-ink/80 hover:bg-ink/95 text-white flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity duration-200 backdrop-blur-sm border-r border-white/5"
+          className="absolute left-0 top-0 bottom-0 z-30 w-10 sm:w-12 bg-[#08080C]/80 hover:bg-[#08080C]/95 text-white flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity duration-200 backdrop-blur-sm border-r border-white/5"
           title="Scroll Left"
         >
           <ChevronLeft className="w-6 h-6 sm:w-8 sm:h-8" />
@@ -93,7 +94,7 @@ export const ContinueWatchingRow: React.FC<ContinueWatchingRowProps> = ({
             return (
               <div
                 key={`${progress.animeId}-${progress.episodeId}`}
-                className="flex-shrink-0 w-64 sm:w-72 md:w-80 group/card relative rounded-xl overflow-hidden bg-surface border border-white/10 hover:border-brand/60 transition-all duration-300 shadow-lg hover:shadow-[0_0_20px_rgba(229,9,20,0.2)]"
+                className="flex-shrink-0 w-64 sm:w-72 md:w-80 group/card relative rounded-xl overflow-hidden bg-[#10121A] border border-white/10 hover:border-[#E50914]/60 transition-all duration-300 shadow-lg hover:shadow-[0_0_20px_rgba(229,9,20,0.2)]"
               >
                 {/* Thumbnail Container */}
                 {(() => {
@@ -117,10 +118,10 @@ export const ContinueWatchingRow: React.FC<ContinueWatchingRowProps> = ({
                       )}
 
                       {/* Dark Vignette Overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-surface via-black/20 to-black/30" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#10121A] via-black/20 to-black/30" />
 
                       {/* Studio Badge */}
-                      <div className="absolute top-2.5 left-2.5 bg-ink/85 backdrop-blur-xs text-[10px] font-bold text-white px-2 py-0.5 rounded-md border border-white/10">
+                      <div className="absolute top-2.5 left-2.5 bg-[#08080C]/85 backdrop-blur-xs text-[10px] font-bold text-white px-2 py-0.5 rounded-md border border-white/10">
                         {anime.studioName}
                       </div>
 
@@ -130,7 +131,7 @@ export const ContinueWatchingRow: React.FC<ContinueWatchingRowProps> = ({
                       e.stopPropagation();
                       onRemoveItem(progress.animeId, progress.episodeId);
                     }}
-                    className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-black/70 hover:bg-brand text-white flex items-center justify-center transition-colors shadow-md"
+                    className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-black/70 hover:bg-[#E50914] text-white flex items-center justify-center transition-colors shadow-md"
                     title="Remove from Continue Watching"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -138,7 +139,7 @@ export const ContinueWatchingRow: React.FC<ContinueWatchingRowProps> = ({
 
                   {/* Center Play Button Overlay on Hover */}
                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/card:opacity-100 transition-opacity bg-black/40">
-                    <div className="w-12 h-12 rounded-full bg-brand text-white flex items-center justify-center shadow-[0_0_20px_rgba(229,9,20,0.6)] transform scale-90 group-hover/card:scale-100 transition-transform">
+                    <div className="w-12 h-12 rounded-full bg-[#E50914] text-white flex items-center justify-center shadow-[0_0_20px_rgba(229,9,20,0.6)] transform scale-90 group-hover/card:scale-100 transition-transform">
                       <Play className="w-5 h-5 fill-white ml-0.5" />
                     </div>
                   </div>
@@ -146,7 +147,7 @@ export const ContinueWatchingRow: React.FC<ContinueWatchingRowProps> = ({
                   {/* Bottom Progress Bar inside thumbnail */}
                   <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-zinc-800">
                     <div
-                      className="h-full bg-gradient-to-r from-brand to-red-400 shadow-[0_0_8px_rgba(229,9,20,0.8)]"
+                      className="h-full bg-gradient-to-r from-[#E50914] to-red-400 shadow-[0_0_8px_rgba(229,9,20,0.8)]"
                       style={{ width: `${percent}%` }}
                     />
                   </div>
@@ -159,13 +160,13 @@ export const ContinueWatchingRow: React.FC<ContinueWatchingRowProps> = ({
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <p
-                        className="text-xs font-bold text-white truncate hover:text-brand cursor-pointer"
+                        className="text-xs font-bold text-white truncate hover:text-[#E50914] cursor-pointer"
                         onClick={() => onOpenDetails(anime)}
                       >
                         {anime.title}
                       </p>
                       <p className="text-[11px] text-zinc-400 truncate mt-0.5">
-                        Ep {episode.number}: {episode.title}
+                        {itemShortLabel(anime, episode)}: {episode.title}
                       </p>
                     </div>
 
@@ -180,13 +181,13 @@ export const ContinueWatchingRow: React.FC<ContinueWatchingRowProps> = ({
 
                   <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-1 border-t border-white/5">
                     <div className="flex items-center space-x-1 text-zinc-400">
-                      <Clock className="w-3 h-3 text-brand" />
+                      <Clock className="w-3 h-3 text-[#E50914]" />
                       <span>{remainingText}</span>
                     </div>
 
                     <button
                       onClick={() => onResume(anime, episode, progress.currentTime)}
-                      className="text-xs font-bold text-brand hover:text-white flex items-center space-x-1 transition-colors"
+                      className="text-xs font-bold text-[#E50914] hover:text-white flex items-center space-x-1 transition-colors"
                     >
                       <Play className="w-3 h-3 fill-current" />
                       <span>Resume</span>
@@ -200,7 +201,7 @@ export const ContinueWatchingRow: React.FC<ContinueWatchingRowProps> = ({
 
         <button
           onClick={() => handleScroll('right')}
-          className="absolute right-0 top-0 bottom-0 z-30 w-10 sm:w-12 bg-ink/80 hover:bg-ink/95 text-white flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity duration-200 backdrop-blur-sm border-l border-white/5"
+          className="absolute right-0 top-0 bottom-0 z-30 w-10 sm:w-12 bg-[#08080C]/80 hover:bg-[#08080C]/95 text-white flex items-center justify-center opacity-0 group-hover/row:opacity-100 transition-opacity duration-200 backdrop-blur-sm border-l border-white/5"
           title="Scroll Right"
         >
           <ChevronRight className="w-6 h-6 sm:w-8 sm:h-8" />
