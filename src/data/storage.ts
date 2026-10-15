@@ -1,4 +1,4 @@
-import { Anime, Studio, Episode, WatchProgress } from '../types';
+import { Anime, Studio, WatchProgress } from '../types';
 
 const STORAGE_KEYS = {
   STUDIOS: 'zanft_creators_studios_v3',
@@ -128,76 +128,6 @@ export function saveStoredAnime(animeList: Anime[]): void {
   }
 }
 
-export function addAnime(newAnime: Anime): Anime[] {
-  const current = getStoredAnime();
-  const filtered = current.filter((a) => a.id !== newAnime.id);
-  const updated = [newAnime, ...filtered];
-  saveStoredAnime(updated);
-  return updated;
-}
-
-export function updateAnime(animeId: string, updates: Partial<Anime>): Anime[] {
-  const current = getStoredAnime();
-  const updated = current.map(item => item.id === animeId ? { ...item, ...updates } : item);
-  saveStoredAnime(updated);
-  return updated;
-}
-
-export function deleteAnime(animeId: string): Anime[] {
-  const current = getStoredAnime();
-  const updated = current.filter(item => item.id !== animeId);
-  saveStoredAnime(updated);
-  removeWatchProgressForAnime(animeId);
-  return updated;
-}
-
-export function addEpisodeToAnime(animeId: string, episode: Episode): Anime | null {
-  const current = getStoredAnime();
-  let updatedAnime: Anime | null = null;
-  const updated = current.map(item => {
-    if (item.id === animeId) {
-      const episodes = [...(item.episodes || []), episode];
-      updatedAnime = {
-        ...item,
-        episodes,
-        episodesCount: episodes.length
-      };
-      return updatedAnime;
-    }
-    return item;
-  });
-  saveStoredAnime(updated);
-  return updatedAnime;
-}
-
-export function deleteEpisode(animeId: string, episodeId: string): Anime | null {
-  const current = getStoredAnime();
-  let updatedAnime: Anime | null = null;
-  const updated = current.map(item => {
-    if (item.id === animeId) {
-      const episodes = (item.episodes || []).filter(e => e.id !== episodeId);
-      updatedAnime = {
-        ...item,
-        episodes,
-        episodesCount: episodes.length
-      };
-      return updatedAnime;
-    }
-    return item;
-  });
-  saveStoredAnime(updated);
-  removeWatchProgress(animeId, episodeId);
-  return updatedAnime;
-}
-
-export function addStudio(newStudio: Studio): Studio[] {
-  const current = getStoredStudios();
-  const filtered = current.filter((s) => s.id !== newStudio.id && s.name.toLowerCase() !== newStudio.name.toLowerCase());
-  const updated = [newStudio, ...filtered];
-  saveStoredStudios(updated);
-  return updated;
-}
-
 // -------------------------------------------------------------
 // WATCH PROGRESS STORAGE (Real user watch history only)
 // -------------------------------------------------------------
@@ -213,27 +143,6 @@ export function getWatchProgressList(): WatchProgress[] {
   } catch (err) {
     console.error('Failed reading watch progress', err);
     return [];
-  }
-}
-
-export function getWatchProgressForEpisode(animeId: string, episodeId: string): WatchProgress | null {
-  const list = getWatchProgressList();
-  return list.find(i => i.animeId === animeId && i.episodeId === episodeId) || null;
-}
-
-export function saveWatchProgress(progress: WatchProgress) {
-  try {
-    const list = getWatchProgressList();
-    const filtered = list.filter(i => !(i.animeId === progress.animeId && i.episodeId === progress.episodeId));
-    if (progress.progressPercent >= 95) {
-      localStorage.setItem(STORAGE_KEYS.WATCH_PROGRESS, JSON.stringify(filtered));
-    } else {
-      const updated = [progress, ...filtered].slice(0, 15);
-      localStorage.setItem(STORAGE_KEYS.WATCH_PROGRESS, JSON.stringify(updated));
-    }
-    notifyDataChanged();
-  } catch (err) {
-    console.error('Failed saving watch progress', err);
   }
 }
 
@@ -368,11 +277,3 @@ export function subscribeToDataChanges(callback: () => void): () => void {
   };
 }
 
-export function resetDemoData() {
-  try {
-    localStorage.removeItem(STORAGE_KEYS.STUDIOS);
-    localStorage.removeItem(STORAGE_KEYS.ANIME);
-    localStorage.removeItem(STORAGE_KEYS.WATCH_PROGRESS);
-    notifyDataChanged();
-  } catch {}
-}
