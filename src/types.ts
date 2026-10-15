@@ -6,9 +6,17 @@ export interface Episode {
   duration?: string;
   thumbnail?: string;
   synopsis?: string;
-  videoUrl: string;
+  videoUrl: string; // Drive link (Server 1) - may be empty if only a bot link is given
+  botStreamUrl?: string; // Telegram bot stream link
   telegramFileId?: string;
   releaseDate?: string;
+  isTrailer?: boolean; // true for the synthetic episode used to play a trailer
+}
+
+export interface Trailer {
+  title: string;
+  videoUrl: string; // Drive link
+  botStreamUrl?: string; // Telegram bot stream link
 }
 
 export type AnimeType = 'Series' | 'Movie' | 'TV Series' | 'OVA';
@@ -64,6 +72,7 @@ export interface Anime {
   topTenRank?: number;
   trailerUrl?: string;
   crew?: CrewMember[];
+  trailer?: Trailer;
   episodes: Episode[];
   createdAt?: string;
 }
@@ -123,4 +132,3 @@ export interface UpcomingAnime {
   expectedRuntime?: string;
   anticipatedScore?: number;
 }
-
