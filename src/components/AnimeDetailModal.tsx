@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, Play, Building2, Share2, Check, Clock, Sparkles, Film, Clapperboard } from 'lucide-react';
+import { X, Play, Film, Building2, Share2, Check, Clock, Sparkles } from 'lucide-react';
 import { Anime, Episode } from '../types';
 import { StarRating } from './StarRating';
 import { getGoogleDriveStreamInfo } from '../firebase';
-import { itemLabel, itemShortLabel, countText, isMovie } from '../data/labels';
 
 interface AnimeDetailModalProps {
   anime: Anime | null;
   onClose: () => void;
   onPlayEpisode: (anime: Anime, episode: Episode) => void;
-  onPlayTrailer?: (anime: Anime) => void;
   onSelectStudio: (studioName: string) => void;
 }
 
@@ -17,12 +15,10 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
   anime,
   onClose,
   onPlayEpisode,
-  onPlayTrailer,
   onSelectStudio
 }) => {
   const [showShareToast, setShowShareToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('Link copied to clipboard!');
-  const [isCopied, setIsCopied] = useState(false);
   const [copiedEpisodeId, setCopiedEpisodeId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,7 +33,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
 
   const handleShareEpisode = async (ep?: Episode) => {
     const targetEpisode = ep || (episodes.length > 0 ? episodes[0] : null);
-    const episodeSuffix = targetEpisode ? ` - ${itemShortLabel(anime, targetEpisode)}` : '';
+    const episodeSuffix = targetEpisode ? ` - Ep ${targetEpisode.number}` : '';
     const shareTitle = `${anime.title}${episodeSuffix}`;
     const shareText = 'Check out this anime episode on ZANFT!';
     const shareUrl = `${window.location.origin}${window.location.pathname}?anime=${encodeURIComponent(anime.id)}${targetEpisode ? `&ep=${encodeURIComponent(targetEpisode.id)}` : ''}`;
@@ -75,17 +71,15 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
       setCopiedEpisodeId(epId);
       setTimeout(() => setCopiedEpisodeId(null), 2000);
     }
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200 overflow-y-auto">
-      <div className="relative w-full max-w-5xl max-h-[92vh] bg-[#0E101D] border border-white/15 rounded-3xl shadow-2xl overflow-y-auto my-auto no-scrollbar">
+      <div className="relative w-full max-w-5xl max-h-[92vh] bg-surface border border-white/15 rounded-3xl shadow-2xl overflow-y-auto my-auto no-scrollbar">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-30 w-9 h-9 rounded-full bg-black/75 hover:bg-[#E50914] text-white flex items-center justify-center transition-all cursor-pointer border border-white/10 shadow-lg"
+          className="absolute top-4 right-4 z-30 w-9 h-9 rounded-full bg-black/75 hover:bg-brand text-white flex items-center justify-center transition-all cursor-pointer border border-white/10 shadow-lg"
           title="Close Modal"
         >
           <X className="w-5 h-5" />
@@ -116,29 +110,17 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                     <Film className="w-12 h-12" />
                   </div>
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0E101D] via-[#0E101D]/20 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/20 to-transparent" />
 
                 {/* Floating Badges */}
                 <div className="absolute top-3 left-3 flex items-center gap-2">
-                  <span className="px-2.5 py-1 rounded-full bg-[#E50914] text-white text-[10px] font-black uppercase tracking-wider shadow-lg">
+                  <span className="px-2.5 py-1 rounded-full bg-brand text-white text-[10px] font-black uppercase tracking-wider shadow-lg">
                     {anime.type}
                   </span>
                   <span className="px-2 py-0.5 rounded-full bg-black/70 backdrop-blur-md text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
                     {anime.matchPercentage || 98}% Score
                   </span>
                 </div>
-
-                {/* Center Play Overlay on hover */}
-                {episodes.length > 0 && (
-                  <button
-                    onClick={() => onPlayEpisode(anime, episodes[0])}
-                    className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                  >
-                    <div className="w-14 h-14 rounded-full bg-[#E50914] text-white flex items-center justify-center shadow-2xl transform transition-transform group-hover:scale-110">
-                      <Play className="w-6 h-6 fill-white ml-0.5" />
-                    </div>
-                  </button>
-                )}
               </div>
 
               {/* Quick Action Buttons Bar */}
@@ -146,50 +128,18 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                 {episodes.length > 0 && (
                   <button
                     onClick={() => onPlayEpisode(anime, episodes[0])}
-                    className="flex-1 min-w-[140px] flex items-center justify-center space-x-2 px-5 py-2.5 rounded-xl bg-[#E50914] hover:bg-[#B0000D] text-white font-bold text-sm shadow-lg shadow-[#E50914]/40 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+                    className="flex-1 min-w-[140px] flex items-center justify-center space-x-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-deep text-white font-bold text-sm shadow-lg shadow-brand/40 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
                   >
                     <Play className="w-4 h-4 fill-white" />
-                    <span>Play {itemShortLabel(anime, episodes[0])}</span>
+                    <span>Play Ep #1</span>
                   </button>
                 )}
-
-                {anime.trailer && onPlayTrailer && (
-                  <button
-                    onClick={() => onPlayTrailer(anime)}
-                    className="flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-sm transition-all active:scale-95 cursor-pointer"
-                    title={anime.trailer.title || 'Watch Trailer'}
-                  >
-                    <Clapperboard className="w-4 h-4" />
-                    <span>Trailer</span>
-                  </button>
-                )}
-
-                {/* Modern Sleek Share Episode Pill Button */}
-                <button
-                  onClick={() => handleShareEpisode()}
-                  className={`flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-sm font-medium text-white transition-all cursor-pointer active:scale-95 ${
-                    isCopied ? 'bg-emerald-700/80 border-emerald-500 text-emerald-100' : ''
-                  }`}
-                  title="Share this episode"
-                >
-                  {isCopied ? (
-                    <>
-                      <Check className="w-4 h-4 text-emerald-400" />
-                      <span>Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Share2 className="w-4 h-4 text-zinc-300" />
-                      <span>Share {isMovie(anime) ? 'Movie' : 'Episode'}</span>
-                    </>
-                  )}
-                </button>
               </div>
 
               {/* Studio Info Badge */}
               <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
                 <div className="flex items-center space-x-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-[#E50914]/20 border border-[#E50914]/30 flex items-center justify-center text-[#E50914] flex-shrink-0">
+                  <div className="w-8 h-8 rounded-xl bg-brand/20 border border-brand/30 flex items-center justify-center text-brand flex-shrink-0">
                     <Building2 className="w-4 h-4" />
                   </div>
                   <div className="truncate">
@@ -203,7 +153,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                     onClose();
                     onSelectStudio(anime.studioName);
                   }}
-                  className="text-xs font-bold text-[#E50914] hover:underline px-2 py-1 flex-shrink-0 cursor-pointer"
+                  className="text-xs font-bold text-brand hover:underline px-2 py-1 flex-shrink-0 cursor-pointer"
                 >
                   View Studio
                 </button>
@@ -214,17 +164,14 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
             <div className="lg:col-span-7 space-y-5">
               <div>
                 <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
-                    HD Stream
-                  </span>
                   <span className="text-zinc-400 text-xs font-semibold">{anime.rating || 'TV-14'}</span>
                   <span className="text-zinc-600">·</span>
                   <span className="text-zinc-400 text-xs font-semibold">{anime.year || 2025}</span>
                   <span className="text-zinc-600">·</span>
-                  <span className="text-zinc-400 text-xs font-semibold">{countText(anime, episodes.length)}</span>
+                  <span className="text-zinc-400 text-xs font-semibold">{episodes.length} Episodes</span>
                 </div>
 
-                <h1 className="font-syne font-black text-2xl sm:text-3xl lg:text-4xl text-white tracking-tight leading-tight">
+                <h1 className="font-display font-black text-2xl sm:text-3xl lg:text-4xl text-white tracking-tight leading-tight">
                   {anime.title}
                 </h1>
 
@@ -252,18 +199,18 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
               {/* Synopsis */}
               <div className="space-y-1.5">
                 <h3 className="text-xs uppercase tracking-widest text-zinc-400 font-bold flex items-center space-x-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-[#E50914]" />
-                  <span>Storyline & Synopsis</span>
+                  <Sparkles className="w-3.5 h-3.5 text-brand" />
+                  <span>Synopsis</span>
                 </h3>
                 <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed font-normal">
                   {anime.synopsis || 'No synopsis provided for this title.'}
                 </p>
               </div>
 
-              {/* Viewer Reviews & Rating */}
+              {/* Rating */}
               <div className="pt-3 border-t border-white/10 space-y-2">
                 <h3 className="text-xs uppercase tracking-widest text-zinc-400 font-bold">
-                  Viewer Reviews & Rating
+                  Rating
                 </h3>
                 <StarRating animeId={anime.id} />
               </div>
@@ -271,15 +218,15 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
               {/* Episode List */}
               <div className="pt-3 border-t border-white/10 space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-syne font-bold text-white text-base sm:text-lg">
-                    Available {isMovie(anime) ? 'Movies' : 'Episodes'} ({episodes.length})
+                  <h3 className="font-display font-bold text-white text-base sm:text-lg">
+                    Available Episodes ({episodes.length})
                   </h3>
-                  <span className="text-xs text-zinc-400">HD Streaming</span>
+                  
                 </div>
 
                 {episodes.length === 0 ? (
                   <p className="text-xs text-zinc-500 italic py-4">
-                    No {isMovie(anime) ? 'movies' : 'episodes'} uploaded yet for this title.
+                    No episodes uploaded yet for this title.
                   </p>
                 ) : (
                   <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
@@ -297,7 +244,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                             onClick={() => onPlayEpisode(anime, ep)}
                             className="flex items-center space-x-3 min-w-0 flex-1 cursor-pointer"
                           >
-                            <span className="w-8 h-8 rounded-xl bg-white/5 group-hover:bg-[#E50914] text-zinc-300 group-hover:text-white font-mono text-xs font-bold flex items-center justify-center flex-shrink-0 transition-colors">
+                            <span className="w-8 h-8 rounded-xl bg-white/5 group-hover:bg-brand text-zinc-300 group-hover:text-white font-mono text-xs font-bold flex items-center justify-center flex-shrink-0 transition-colors">
                               #{ep.number}
                             </span>
 
@@ -318,12 +265,12 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                             ) : null}
 
                             <div className="min-w-0 flex-1">
-                              <h4 className="font-bold text-white text-xs sm:text-sm truncate group-hover:text-[#E50914] transition-colors">
+                              <h4 className="font-bold text-white text-xs sm:text-sm truncate group-hover:text-brand transition-colors">
                                 {ep.title}
                               </h4>
                               <p className="text-[11px] text-zinc-400 font-mono mt-0.5 flex items-center space-x-1">
                                 <Clock className="w-3 h-3 text-zinc-500" />
-                                <span>{itemShortLabel(anime, ep)} · {ep.duration || '24m'}</span>
+                                <span>{ep.duration || '24m'}</span>
                               </p>
                             </div>
                           </div>
@@ -338,7 +285,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                               className={`p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 transition-all cursor-pointer ${
                                 isThisEpCopied ? 'text-emerald-400 bg-emerald-500/20' : 'text-zinc-400 hover:text-white'
                               }`}
-                              title={`Share ${itemLabel(anime, ep)}`}
+                              title={`Share Episode ${ep.number}`}
                             >
                               {isThisEpCopied ? (
                                 <Check className="w-3.5 h-3.5" />
@@ -352,7 +299,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                                 e.stopPropagation();
                                 onPlayEpisode(anime, ep);
                               }}
-                              className="px-3 py-1.5 rounded-xl bg-[#E50914] hover:bg-[#B0000D] text-xs font-bold text-white transition-all flex items-center space-x-1 shadow-md active:scale-95 cursor-pointer"
+                              className="px-3 py-1.5 rounded-xl bg-brand hover:bg-brand-deep text-xs font-bold text-white transition-all flex items-center space-x-1 shadow-md active:scale-95 cursor-pointer"
                             >
                               <Play className="w-3.5 h-3.5 fill-white" />
                               <span>Play</span>

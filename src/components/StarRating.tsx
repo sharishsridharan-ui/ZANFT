@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Star, Check, Sparkles } from 'lucide-react';
-import {
-  saveUserRatingForAnime,
-  getCommunityRatingForAnime
-} from '../data/storage';
+import { saveUserRatingForAnime, getCommunityRatingForAnime } from '../data/storage';
 
 interface StarRatingProps {
   animeId: string;
@@ -50,7 +47,7 @@ export const StarRating: React.FC<StarRatingProps> = ({
             <>
               <div className="flex items-center space-x-1 text-amber-400">
                 <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
-                <span className="font-syne font-black text-white text-lg sm:text-xl">
+                <span className="font-display font-black text-white text-lg sm:text-xl">
                   {ratingData.average.toFixed(1)}
                 </span>
                 <span className="text-zinc-500 text-xs font-semibold">/ 5.0</span>
@@ -75,9 +72,7 @@ export const StarRating: React.FC<StarRatingProps> = ({
               <Check className="w-3.5 h-3.5" />
               <span>Your rating: {ratingData.userRating} / 5 stars</span>
             </span>
-          ) : (
-            <span className="text-zinc-500 font-medium">Tap stars below to rate</span>
-          )}
+          ) : null}
         </div>
       </div>
 

@@ -7,13 +7,14 @@ import { SORT_OPTIONS, SortKey, sortAnime } from '../utils/mappers';
 interface CatalogPageProps {
   title: string;
   noun: string;
+  plural: string;
   items: Anime[];
   onSelectAnime: (anime: Anime) => void;
   onPlayAnime: (anime: Anime) => void;
 }
 
 /** One catalogue page for both Series and Movies. */
-export const CatalogPage: React.FC<CatalogPageProps> = ({ title, noun, items, onSelectAnime, onPlayAnime }) => {
+export const CatalogPage: React.FC<CatalogPageProps> = ({ title, noun, plural, items, onSelectAnime, onPlayAnime }) => {
   const [sortBy, setSortBy] = useState<SortKey>('popular');
   const sorted = useMemo(() => sortAnime(items, sortBy), [items, sortBy]);
 
@@ -23,7 +24,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ title, noun, items, on
         <div>
           <h1 className="font-display text-4xl sm:text-5xl font-extrabold text-white">{title}</h1>
           <p className="text-sm text-zinc-400 mt-1">
-            {sorted.length} {noun}{sorted.length === 1 ? '' : 's'}
+            {sorted.length} {sorted.length === 1 ? noun : plural}
           </p>
         </div>
 
@@ -46,7 +47,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ title, noun, items, on
       {sorted.length === 0 ? (
         <div className="py-16 text-center max-w-md mx-auto space-y-3">
           <Film className="w-10 h-10 text-zinc-600 mx-auto" />
-          <h2 className="font-display text-lg font-bold text-white">No {noun}s yet</h2>
+          <h2 className="font-display text-lg font-bold text-white">No {plural} yet</h2>
           <p className="text-sm text-zinc-400">
             Studios publish from their dashboard. New releases show up here as soon as they go live.
           </p>
