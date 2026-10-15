@@ -832,6 +832,7 @@ export async function updateStudioProfile(
   try {
     const publicUpdates = toPublicStudio(updates);
     if (Object.keys(publicUpdates).length > 0) {
+      publicUpdates.updatedAt = new Date().toISOString();
       const studioDocRef = doc(db, 'studios', studioId);
       updateDoc(studioDocRef, publicUpdates).catch((err) => {
         console.warn('Firestore studio update failed:', err);
@@ -1306,3 +1307,12 @@ export function startCloudSync(): void {
 }
 
 startCloudSync();
+
+
+/*
+ * MERGE NOTE
+ * The second pasted module used a different Firestore schema (nested studio/anime/episodes
+ * subcollections). This project uses top-level `anime/{animeId}` documents with episodes
+ * embedded in the `episodes` array. Its management operations are therefore merged into the
+ * existing functions above instead of being pasted as duplicate exports.
+ */
