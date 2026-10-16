@@ -89,6 +89,16 @@ function toPublicStudio(studio: Record<string, any>): Record<string, any> {
   return cleanForFirestore(rest);
 }
 
+// Turns a Firestore error into a message the studio can actually read.
+function cloudSaveError(err: any, action: string): Error {
+  console.error(`Firestore ${action} failed:`, err);
+  return new Error(
+    err?.code === 'permission-denied'
+      ? `Cloud save blocked by Firestore rules. Signed in as: ${auth.currentUser?.email || 'nobody'} - Google sign-in pannitu thirumba try pannunga.`
+      : 'Cloud save failed. Check internet and try again.'
+  );
+}
+
 // -------------------------------------------------------------
 // IN-MEMORY CACHES FOR 0ms INSTANT LOCAL-FIRST PERFORMANCE
 // -------------------------------------------------------------
@@ -262,7 +272,7 @@ function getOwnedStudioIds(): Set<string> {
 // Master owner Google account - must match isMaster() in firestore.rules
 export const MASTER_OWNER_EMAIL = 'sharishsridharan@gmail.com';
 
-// Cloud deletes need a real Firebase identity. The owner/studio session in
+// Cloud writes need a real Firebase identity. The owner/studio session in
 // localStorage survives a refresh, but the Firebase sign-in may not - so ask again.
 // When the caller is the Master Owner, the Google account must be the owner Gmail.
 async function ensureCloudSignIn(isMasterOwner = false): Promise<void> {
@@ -270,7 +280,7 @@ async function ensureCloudSignIn(isMasterOwner = false): Promise<void> {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch {
-      throw new Error('Cloud-la delete aaga Google sign-in venum. Popup-a allow pannitu thirumba try pannunga.');
+      throw new Error('Cloud-la save aaga Google sign-in venum. Popup-a allow pannitu thirumba try pannunga.');
     }
   }
   if (isMasterOwner) {
@@ -353,8 +363,6 @@ function startTombstoneSync() {
 
 // -------------------------------------------------------------
 // REAL-TIME SUBSCRIPTIONS
-
-
 // -------------------------------------------------------------
 
 // Subscribe to real-time anime list
@@ -942,7 +950,16 @@ export async function createAnimeFolder(
     trailer: normalizeTrailer(animeData.trailer)
   };
 
-  // 1. Immediately store in live memory and persistent storage (0ms)
+  // 1. Save to Firestore FIRST. If it fails the studio sees the real reason,
+  //    instead of the folder showing locally and vanishing on the next sync.
+  await ensureCloudSignIn(false);
+  try {
+    await setDoc(doc(db, 'anime', animeId), cleanForFirestore(newAnime));
+  } catch (err: any) {
+    throw cloudSaveError(err, 'anime create');
+  }
+
+  // 2. Then update the live caches and persistent storage
   memoryAnimeCache.unshift(newAnime);
 
   // Increment studio anime count in cache
@@ -954,13 +971,8 @@ export async function createAnimeFolder(
   syncCachesToStorage();
   notifyDataChanged();
 
-  // 2. Non-blocking Firestore sync (try/catch ensures 0 UI failure)
+  // 3. The studio's anime counter is cosmetic, so it stays non-blocking
   try {
-    const animeDocRef = doc(db, 'anime', animeId);
-    setDoc(animeDocRef, cleanForFirestore(newAnime)).catch((err) => {
-      console.warn('Firestore anime write failed:', err);
-    });
-
     const studioDocRef = doc(db, 'studios', studioId);
     getDoc(studioDocRef).then((snap) => {
       if (snap.exists()) {
@@ -989,6 +1001,17 @@ export async function updateAnimeFolder(
     throw new Error('Permission denied: You can only edit anime folders belonging to your studio.');
   }
 
+  // Save to Firestore FIRST so a failure is visible and the edit survives a refresh
+  await ensureCloudSignIn(isMasterOwner);
+  try {
+    await updateDoc(
+      doc(db, 'anime', animeId),
+      cleanForFirestore({ ...updateData, updatedAt: new Date().toISOString() })
+    );
+  } catch (err: any) {
+    throw cloudSaveError(err, 'anime update');
+  }
+
   memoryAnimeCache[animeIdx] = {
     ...currentAnime,
     ...updateData
@@ -996,14 +1019,6 @@ export async function updateAnimeFolder(
 
   syncCachesToStorage();
   notifyDataChanged();
-
-  // Non-blocking Firestore sync
-  try {
-    const animeDocRef = doc(db, 'anime', animeId);
-    updateDoc(animeDocRef, cleanForFirestore({ ...updateData, updatedAt: new Date().toISOString() })).catch((err) => {
-      console.warn('Firestore anime update failed:', err);
-    });
-  } catch {}
 }
 
 export async function deleteAnimeFolder(
@@ -1098,18 +1113,23 @@ export async function addEpisodeToAnime(
   };
 
   const updatedEpisodes = [...currentEpisodes, newEpisode].sort((a, b) => a.number - b.number);
+
+  // Save to Firestore FIRST. If it fails the studio sees the real reason,
+  // instead of the episode showing locally and vanishing on the next sync.
+  await ensureCloudSignIn(isMasterOwner);
+  try {
+    await updateDoc(
+      doc(db, 'anime', animeId),
+      cleanForFirestore({ episodes: updatedEpisodes, updatedAt: new Date().toISOString() })
+    );
+  } catch (err: any) {
+    throw cloudSaveError(err, 'episode add');
+  }
+
   memoryAnimeCache[animeIdx].episodes = updatedEpisodes;
 
   syncCachesToStorage();
   notifyDataChanged();
-
-  // Non-blocking Firestore sync
-  try {
-    const animeDocRef = doc(db, 'anime', animeId);
-    updateDoc(animeDocRef, cleanForFirestore({ episodes: updatedEpisodes, updatedAt: new Date().toISOString() })).catch((err) => {
-      console.warn('Firestore episode update failed:', err);
-    });
-  } catch {}
 }
 
 // Add / replace / remove (pass null) the trailer of an anime folder.
