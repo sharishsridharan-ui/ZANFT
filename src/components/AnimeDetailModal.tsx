@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Play, Film, Building2, Share2, Check, Clock, Sparkles } from 'lucide-react';
+import { X, Play, Film, Building2, Share2, Check, Clock, Sparkles, Clapperboard } from 'lucide-react';
 import { Anime, Episode } from '../types';
 import { StarRating } from './StarRating';
 import { getGoogleDriveStreamInfo } from '../firebase';
@@ -8,6 +8,7 @@ interface AnimeDetailModalProps {
   anime: Anime | null;
   onClose: () => void;
   onPlayEpisode: (anime: Anime, episode: Episode) => void;
+  onPlayTrailer?: (anime: Anime) => void;
   onSelectStudio: (studioName: string) => void;
 }
 
@@ -15,6 +16,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
   anime,
   onClose,
   onPlayEpisode,
+  onPlayTrailer,
   onSelectStudio
 }) => {
   const [showShareToast, setShowShareToast] = useState(false);
@@ -131,7 +133,16 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                     className="flex-1 min-w-[140px] flex items-center justify-center space-x-2 px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-deep text-white font-bold text-sm shadow-lg shadow-brand/40 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
                   >
                     <Play className="w-4 h-4 fill-white" />
-                    <span>Play Ep #1</span>
+                    <span>{anime.type === 'Movie' ? 'Play Movie' : 'Play Ep #1'}</span>
+                  </button>
+                )}
+                {anime.trailer && (anime.trailer.videoUrl || anime.trailer.botStreamUrl) && onPlayTrailer && (
+                  <button
+                    onClick={() => onPlayTrailer(anime)}
+                    className="flex items-center justify-center space-x-2 px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold text-sm transition-all cursor-pointer"
+                  >
+                    <Clapperboard className="w-4 h-4" />
+                    <span>Trailer</span>
                   </button>
                 )}
               </div>

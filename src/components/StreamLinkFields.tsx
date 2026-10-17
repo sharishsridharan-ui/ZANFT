@@ -1,17 +1,19 @@
 import React from 'react';
-import { CheckCircle2, Clapperboard, X, Check, Trash2 } from 'lucide-react';
+import { CheckCircle2, Clapperboard, X, Check, Trash2, Send } from 'lucide-react';
 import { getGoogleDriveStreamInfo } from '../firebase';
 import { Trailer } from '../types';
 
 const inputCls =
-  'w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm font-mono focus:outline-none focus:border-[#E50914]';
+  'w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-[#E50914]';
 const labelCls = 'font-semibold text-zinc-300';
 
 // -------------------------------------------------------------
 // Two link boxes used for every video: episode, movie and trailer
-//   Drive Link               -> Server 1
-//   Telegram Bot Stream Link -> Server 2 (or Server 1 if it is the only link)
+//   Bot Link   -> Server 1 (the link @Zanft_bot gives you)
+//   Drive Link -> Server 2 (optional backup)
 // -------------------------------------------------------------
+export const BOT_USERNAME = 'Zanft_bot';
+
 interface StreamLinkFieldsProps {
   driveUrl: string;
   botUrl: string;
@@ -26,8 +28,34 @@ export const StreamLinkFields: React.FC<StreamLinkFieldsProps> = ({ driveUrl, bo
 
   return (
     <div className="space-y-3">
-      <div className="space-y-1">
-        <label className={labelCls}>Drive Link</label>
+      <div className="space-y-1.5">
+        <label className={`${labelCls} flex items-center justify-between gap-2`}>
+          <span>Bot Link</span>
+          <a
+            href={`https://t.me/${BOT_USERNAME}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/30 text-sky-300 text-[11px] font-bold hover:bg-sky-500/25"
+          >
+            <Send className="w-3 h-3" /> @{BOT_USERNAME}
+          </a>
+        </label>
+        <input
+          type="text"
+          value={botUrl}
+          onChange={(e) => onBotChange(e.target.value)}
+          placeholder={`Paste the link @${BOT_USERNAME} sent you`}
+          className={inputCls}
+        />
+        <p className="text-[11px] text-zinc-400">
+          Send your video to <strong className="text-zinc-200">@{BOT_USERNAME}</strong> on Telegram. It replies with a link, paste that link here.
+        </p>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className={labelCls}>
+          Drive Link <span className="text-zinc-500 font-normal">(optional backup)</span>
+        </label>
         <input
           type="text"
           value={driveUrl}
@@ -42,23 +70,14 @@ export const StreamLinkFields: React.FC<StreamLinkFieldsProps> = ({ driveUrl, bo
         )}
       </div>
 
-      <div className="space-y-1">
-        <label className={labelCls}>Telegram Bot Stream Link</label>
-        <input
-          type="text"
-          value={botUrl}
-          onChange={(e) => onBotChange(e.target.value)}
-          placeholder="Paste the stream link from the Telegram bot"
-          className={inputCls}
-        />
-      </div>
-
       <p className="text-[11px] text-zinc-400">
         {hasDrive && hasBot
-          ? 'Viewers will see: Server 1 + Server 2'
-          : hasDrive || hasBot
-          ? 'Viewers will see: Server 1 only'
-          : 'Add at least one link (both links = Server 1 + Server 2)'}
+          ? 'Viewers will see: Server 1 (Bot) + Server 2 (Drive)'
+          : hasBot
+          ? 'Viewers will see: Server 1 (Bot)'
+          : hasDrive
+          ? 'Viewers will see: Server 1 (Drive)'
+          : 'Add at least one link'}
       </p>
     </div>
   );
@@ -176,7 +195,7 @@ export const TrailerEditorModal: React.FC<TrailerEditorModalProps> = ({ animeTit
     e.preventDefault();
     const trailer = draftToTrailer(draft);
     if (!trailer) {
-      setError('Add at least one link: Drive link or Telegram bot stream link.');
+      setError('Add at least one link: Bot link or Drive link.');
       return;
     }
     setError(null);

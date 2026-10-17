@@ -30,6 +30,7 @@ import {
   updateAnimeFolder,
   deleteAnimeFolder,
   addEpisodeToAnime,
+  updateEpisodeInAnime,
   deleteEpisodeFromAnime,
   updateStudioProfile,
   deleteStudio,
@@ -196,11 +197,11 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [editingAnime, setEditingAnime] = useState<CloudAnime | null>(null);
   const [selectedAnimeForEpisode, setSelectedAnimeForEpisode] = useState<CloudAnime | null>(null);
+  const [editingEpisodeId, setEditingEpisodeId] = useState<string | null>(null); // set = edit mode
   const [isDeleteStudioModalOpen, setIsDeleteStudioModalOpen] = useState(false);
 
   // Studio Edit Details State
   const [studioName, setStudioName] = useState(currentStudio?.name || session.studioName);
-  const [studioPassword, setStudioPassword] = useState('');
   const [logoUrl, setLogoUrl] = useState(currentStudio?.logo || session.logo || '');
   const [pcBannerUrl, setPcBannerUrl] = useState(currentStudio?.banner || session.banner || '');
   const [mobileBannerUrl, setMobileBannerUrl] = useState(currentStudio?.mobileBanner || session.mobileBanner || '');
@@ -233,7 +234,6 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
   const [folderType, setFolderType] = useState<'Series' | 'Movie'>('Series');
   const [folderTitle, setFolderTitle] = useState('');
   const [selectedGenres, setSelectedGenres] = useState<string[]>(['Action', 'Fantasy']);
-  const [customGenreInput, setCustomGenreInput] = useState('');
   const [folderSynopsis, setFolderSynopsis] = useState('');
 
   // Dual Posters for Creation:
@@ -363,21 +363,12 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
     );
   };
 
-  const handleAddCustomGenre = () => {
-    const trimmed = customGenreInput.trim();
-    if (trimmed && !selectedGenres.includes(trimmed)) {
-      setSelectedGenres((prev) => [...prev, trimmed]);
-      setCustomGenreInput('');
-    }
-  };
-
   // Open "Create Folder" flow
   const handleOpenCreateFolder = () => {
     setCreateStep(1);
     setFolderType('Series');
     setFolderTitle('');
     setSelectedGenres(['Action', 'Fantasy']);
-    setCustomGenreInput('');
     setFolderSynopsis('');
     setFolderPoster('');
     setFolderBanner('');
@@ -411,10 +402,6 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
       bio: studioBio.trim(),
       theme: studioTheme
     };
-
-    if (studioPassword.trim()) {
-      updatedProfileData.password = studioPassword.trim();
-    }
 
     const updatedSession: StudioSession = {
       ...session,
@@ -481,7 +468,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
       return;
     }
     if (!epVideoUrl.trim() && !epBotUrl.trim()) {
-      showNotification('Add at least one link: Drive link or Telegram bot stream link.', true);
+      showNotification('Add at least one link: Bot link or Drive link.', true);
       return;
     }
 
@@ -577,26 +564,29 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
       return;
     }
     if (!singleEpVideoUrl.trim() && !singleEpBotUrl.trim()) {
-      showNotification('Add at least one link: Drive link or Telegram bot stream link.', true);
+      showNotification('Add at least one link: Bot link or Drive link.', true);
       return;
     }
 
     setLoading(true);
     try {
-      await addEpisodeToAnime(
-        selectedAnimeForEpisode.id,
-        {
-          number: Number(singleEpNumber),
-          title: singleEpTitle.trim(),
-          videoUrl: singleEpVideoUrl.trim(),
-          botStreamUrl: singleEpBotUrl.trim(),
-          duration: singleEpDuration.trim()
-        },
-        session.studioId,
-        false
-      );
-      showNotification(`${selectedAnimeForEpisode.type === 'Movie' ? 'Movie' : 'Episode'} ${singleEpNumber} added successfully!`);
+      const payload = {
+        number: Number(singleEpNumber),
+        title: singleEpTitle.trim(),
+        videoUrl: singleEpVideoUrl.trim(),
+        botStreamUrl: singleEpBotUrl.trim(),
+        duration: singleEpDuration.trim()
+      };
+      const noun = selectedAnimeForEpisode.type === 'Movie' ? 'Movie' : 'Episode';
+      if (editingEpisodeId) {
+        await updateEpisodeInAnime(selectedAnimeForEpisode.id, editingEpisodeId, payload, session.studioId, false);
+        showNotification(`${noun} ${singleEpNumber} updated successfully!`);
+      } else {
+        await addEpisodeToAnime(selectedAnimeForEpisode.id, payload, session.studioId, false);
+        showNotification(`${noun} ${singleEpNumber} added successfully!`);
+      }
       setSelectedAnimeForEpisode(null);
+      setEditingEpisodeId(null);
     } catch (err: any) {
       showNotification(err.message || 'Unable to add episode.', true);
     } finally {
@@ -979,6 +969,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                         </button>
                         <button
                           onClick={() => {
+                            setEditingEpisodeId(null);
                             setSelectedAnimeForEpisode(anime);
                             const nextNum = (anime.episodes?.length || 0) + 1;
                             setSingleEpNumber(nextNum);
@@ -1031,18 +1022,42 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                                 <div className="truncate">
                                   <div className="flex items-center space-x-1.5">
                                     <p className="font-semibold text-white truncate">{ep.title}</p>
-                                    <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[9px] font-bold flex items-center space-x-0.5 flex-shrink-0">
-                                      <CheckCircle2 className="w-2.5 h-2.5" />
-                                      <span>Drive Stream</span>
-                                    </span>
+                                    {ep.botStreamUrl && (
+                                      <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 text-[9px] font-bold flex-shrink-0">
+                                        Bot
+                                      </span>
+                                    )}
+                                    {ep.videoUrl && (
+                                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[9px] font-bold flex-shrink-0">
+                                        Drive
+                                      </span>
+                                    )}
+                                    {!ep.botStreamUrl && !ep.videoUrl && (
+                                      <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 border border-red-500/30 text-[9px] font-bold flex-shrink-0">
+                                        No link
+                                      </span>
+                                    )}
                                   </div>
-                                  <p className="text-[10px] text-zinc-400 font-mono">
-                                    Drive: {epDrive.fileId ? `ID: ${epDrive.fileId.slice(0, 8)}...` : 'Linked'} · {ep.duration}
-                                  </p>
+                                  <p className="text-[10px] text-zinc-400">{ep.duration}</p>
                                 </div>
                               </div>
 
                               <div className="flex items-center space-x-1 flex-shrink-0">
+                                <button
+                                  onClick={() => {
+                                    setSelectedAnimeForEpisode(anime);
+                                    setEditingEpisodeId(ep.id);
+                                    setSingleEpNumber(ep.number);
+                                    setSingleEpTitle(ep.title);
+                                    setSingleEpVideoUrl(ep.videoUrl || '');
+                                    setSingleEpBotUrl(ep.botStreamUrl || '');
+                                    setSingleEpDuration(ep.duration || '24m');
+                                  }}
+                                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-zinc-200 hover:text-white transition-colors cursor-pointer"
+                                  title="Edit links and details"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
                                 <button
                                   onClick={() => onPlayEpisode(anime, ep)}
                                   className="p-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 hover:text-white transition-colors cursor-pointer"
@@ -1911,11 +1926,11 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
               <div className="flex items-center space-x-2">
                 <Video className="w-5 h-5 text-[#E50914]" />
                 <h3 className="font-syne font-bold text-white text-base">
-                  Add {selectedAnimeForEpisode.type === 'Movie' ? 'Movie' : 'Episode'}: {selectedAnimeForEpisode.title}
+                  {editingEpisodeId ? 'Edit' : 'Add'} {selectedAnimeForEpisode.type === 'Movie' ? 'Movie' : 'Episode'}: {selectedAnimeForEpisode.title}
                 </h3>
               </div>
               <button
-                onClick={() => setSelectedAnimeForEpisode(null)}
+                onClick={() => { setSelectedAnimeForEpisode(null); setEditingEpisodeId(null); }}
                 className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
@@ -1958,7 +1973,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
               <div className="flex justify-end space-x-2 pt-2 border-t border-white/10">
                 <button
                   type="button"
-                  onClick={() => setSelectedAnimeForEpisode(null)}
+                  onClick={() => { setSelectedAnimeForEpisode(null); setEditingEpisodeId(null); }}
                   className="px-4 py-2 bg-white/5 text-zinc-300 rounded-xl hover:bg-white/10 cursor-pointer"
                 >
                   Cancel
@@ -1968,7 +1983,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   disabled={loading}
                   className="px-5 py-2 bg-[#E50914] hover:bg-[#B0000D] disabled:opacity-50 text-white font-bold rounded-xl cursor-pointer"
                 >
-                  {loading ? 'Adding...' : `Add ${selectedAnimeForEpisode.type === 'Movie' ? 'Movie' : 'Episode'}`}
+                  {loading ? 'Saving...' : `${editingEpisodeId ? 'Save' : 'Add'} ${selectedAnimeForEpisode.type === 'Movie' ? 'Movie' : 'Episode'}`}
                 </button>
               </div>
             </form>

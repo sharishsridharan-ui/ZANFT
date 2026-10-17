@@ -180,7 +180,7 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
                   className="flex items-center space-x-2 bg-brand hover:bg-brand-deep text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-[0_0_15px_rgba(229,9,20,0.4)] transition-all cursor-pointer"
                 >
                   <Building2 className="w-4 h-4" />
-                  <span>Studio Portal & Uploads</span>
+                  <span>Login / Sign up</span>
                 </button>
               )}
             </div>
@@ -458,14 +458,14 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
           <p className="text-zinc-400 text-xs leading-relaxed">
             {studioSearch.trim()
               ? `No studios matched your search for "${studioSearch}".`
-              : 'Register your independent fandub studio and start streaming anime releases on ZANFT today.'}
+              : 'Sign up with your independent fandub studio and start publishing anime releases on ZANFT today.'}
           </p>
           {handleRegisterStudio && (
             <button
               onClick={handleRegisterStudio}
               className="px-6 py-2.5 rounded-xl bg-brand hover:bg-brand-deep text-white text-xs font-bold transition-all shadow-lg active:scale-95 cursor-pointer"
             >
-              Register Your Studio
+              Login / Sign up
             </button>
           )}
         </div>

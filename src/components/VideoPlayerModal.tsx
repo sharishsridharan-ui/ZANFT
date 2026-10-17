@@ -117,9 +117,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   if (!anime || !episode) return null;
 
-  // Server list: Drive link -> Server 1, Telegram bot stream link -> Server 2.
+  // Server list: Telegram bot link -> Server 1, Drive link -> Server 2.
   // If only one link exists it is Server 1.
-  const sources = [episode.videoUrl, episode.botStreamUrl].map((u) => (u || '').trim()).filter(Boolean);
+  const sources = [episode.botStreamUrl, episode.videoUrl].map((u) => (u || '').trim()).filter(Boolean);
   const activeIdx = Math.min(serverIdx, Math.max(sources.length - 1, 0));
   const rawUrl = sources[activeIdx] || '';
   const driveInfo = getGoogleDriveStreamInfo(rawUrl);

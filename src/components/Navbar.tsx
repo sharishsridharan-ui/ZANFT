@@ -16,7 +16,7 @@ interface NavbarProps {
   onSelectAnime: (anime: Anime) => void;
   studioSession?: StudioSession | null;
   ownerSession?: OwnerSession | null;
-  onOpenStudioAuth: (tab?: 'register' | 'login' | 'owner') => void;
+  onOpenStudioAuth: (tab?: 'login' | 'owner') => void;
   onOpenStudioDashboard: () => void;
   onOpenOwnerDashboard: () => void;
 }
@@ -243,13 +243,23 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden xs:inline">Owner panel</span>
             </button>
           ) : (
-            <button
-              onClick={() => onOpenStudioAuth('login')}
-              className="h-10 flex items-center gap-2 px-3.5 rounded-full bg-white/10 hover:bg-white/15 border border-line text-sm font-semibold text-white"
-            >
-              <Building2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Studio login</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onOpenStudioAuth('login')}
+                className="h-10 flex items-center gap-2 px-3.5 sm:px-4 rounded-full bg-brand hover:bg-brand-deep text-sm font-bold text-white transition-colors whitespace-nowrap"
+              >
+                <Building2 className="w-4 h-4 hidden sm:block" />
+                <span className="sm:hidden">Log in</span>
+                <span className="hidden sm:inline">Login / Sign up</span>
+              </button>
+              <button
+                onClick={() => onOpenStudioAuth('owner')}
+                className="h-10 flex items-center gap-1.5 px-3.5 rounded-full border border-amber/50 text-amber hover:bg-amber/10 text-sm font-bold transition-colors"
+              >
+                <Crown className="w-4 h-4" />
+                <span className="hidden sm:inline">Owner login</span>
+              </button>
+            </div>
           )}
         </div>
       </div>
