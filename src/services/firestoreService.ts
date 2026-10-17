@@ -1084,7 +1084,7 @@ export async function addEpisodeToAnime(
     throw new Error('Title is required.');
   }
   if (!(episodeData.videoUrl || '').trim() && !(episodeData.botStreamUrl || '').trim()) {
-    throw new Error('Add at least one link: Drive link or Telegram bot stream link.');
+    throw new Error('Add at least one link: Bot link or Drive link.');
   }
 
   const animeIdx = memoryAnimeCache.findIndex((a) => a.id === animeId);
@@ -1132,6 +1132,72 @@ export async function addEpisodeToAnime(
   notifyDataChanged();
 }
 
+// Edit an existing episode / movie (title, number, duration and its links).
+export async function updateEpisodeInAnime(
+  animeId: string,
+  episodeId: string,
+  episodeData: {
+    number: number;
+    title: string;
+    videoUrl?: string; // Drive link
+    botStreamUrl?: string; // Bot link
+    duration?: string;
+  },
+  currentStudioId: string,
+  isMasterOwner: boolean
+): Promise<void> {
+  if (!episodeData.title.trim()) {
+    throw new Error('Title is required.');
+  }
+  if (!(episodeData.videoUrl || '').trim() && !(episodeData.botStreamUrl || '').trim()) {
+    throw new Error('Add at least one link: Bot link or Drive link.');
+  }
+
+  const animeIdx = memoryAnimeCache.findIndex((a) => a.id === animeId);
+  if (animeIdx === -1) throw new Error('Anime folder not found.');
+
+  const currentAnime = memoryAnimeCache[animeIdx];
+  if (!isMasterOwner && currentAnime.studioId !== currentStudioId) {
+    throw new Error('Permission denied: You can only edit episodes of your own folders.');
+  }
+
+  const currentEpisodes: CloudEpisode[] = Array.isArray(currentAnime.episodes) ? currentAnime.episodes : [];
+  if (!currentEpisodes.some((e) => e.id === episodeId)) throw new Error('Episode not found.');
+
+  const rawUrl = (episodeData.videoUrl || '').trim();
+  const driveInfo = getGoogleDriveStreamInfo(rawUrl);
+
+  const updatedEpisodes = currentEpisodes
+    .map((ep) =>
+      ep.id !== episodeId
+        ? ep
+        : {
+            ...ep,
+            number: episodeData.number || ep.number,
+            title: episodeData.title.trim(),
+            videoUrl: rawUrl,
+            botStreamUrl: (episodeData.botStreamUrl || '').trim(),
+            duration: episodeData.duration || ep.duration || '24m',
+            thumbnail: ep.thumbnail || driveInfo.thumbnailUrl || currentAnime.poster || ''
+          }
+    )
+    .sort((a, b) => a.number - b.number);
+
+  await ensureCloudSignIn(isMasterOwner);
+  try {
+    await updateDoc(
+      doc(db, 'anime', animeId),
+      cleanForFirestore({ episodes: updatedEpisodes, updatedAt: new Date().toISOString() })
+    );
+  } catch (err: any) {
+    throw cloudSaveError(err, 'episode update');
+  }
+
+  memoryAnimeCache[animeIdx].episodes = updatedEpisodes;
+  syncCachesToStorage();
+  notifyDataChanged();
+}
+
 // Add / replace / remove (pass null) the trailer of an anime folder.
 export async function setAnimeTrailer(
   animeId: string,
@@ -1150,7 +1216,7 @@ export async function setAnimeTrailer(
 
   const clean = normalizeTrailer(trailer);
   if (trailer && !clean) {
-    throw new Error('Add at least one link: Drive link or Telegram bot stream link.');
+    throw new Error('Add at least one link: Bot link or Drive link.');
   }
 
   try {
