@@ -15,8 +15,10 @@
   --color-brand-deep: #b3121f;
   --color-amber: #ffb84d;
 
-  --font-display: "Bricolage Grotesque", "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Crunchyroll uses Lato for everything: titles, body and numbers */
+  --font-display: "Lato", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Lato", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Lato", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
   /* Tailwind v4 has no xs breakpoint by default; the app uses xs: in many places */
   --breakpoint-xs: 30rem;
@@ -62,7 +64,7 @@
 
 .font-display {
   font-family: var(--font-display);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }

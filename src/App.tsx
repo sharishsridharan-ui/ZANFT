@@ -63,7 +63,7 @@ export default function App() {
   const [ownerSession, setOwnerSession] = useState<OwnerSession | null>(loadOwnerSession);
 
   const [isStudioAuthModalOpen, setIsStudioAuthModalOpen] = useState(false);
-  const [studioAuthInitialTab, setStudioAuthInitialTab] = useState<'register' | 'login' | 'owner'>('login');
+  const [studioAuthInitialTab, setStudioAuthInitialTab] = useState<'login' | 'owner'>('login');
 
   const [selectedStudio, setSelectedStudio] = useState<Studio | null>(null);
   const [detailAnime, setDetailAnime] = useState<Anime | null>(null);
@@ -76,7 +76,7 @@ export default function App() {
   const [shortcutToast, setShortcutToast] = useState<{ key: string; action: string } | null>(null);
   const clearToast = useCallback(() => setShortcutToast(null), []);
 
-  const openStudioAuth = (tab: 'register' | 'login' | 'owner' = 'login') => {
+  const openStudioAuth = (tab: 'login' | 'owner' = 'login') => {
     setStudioAuthInitialTab(tab);
     setIsStudioAuthModalOpen(true);
   };
@@ -264,6 +264,22 @@ export default function App() {
     else setDetailAnime(anime);
   };
 
+  // Trailer plays through the same player using a synthetic episode
+  const handlePlayTrailer = (anime: Anime) => {
+    if (!anime.trailer) return;
+    const trailerEp: Episode = {
+      id: `trailer-${anime.id}`,
+      animeId: anime.id,
+      number: 0,
+      title: anime.trailer.title || 'Official Trailer',
+      thumbnail: anime.banner || anime.poster,
+      videoUrl: anime.trailer.videoUrl,
+      botStreamUrl: anime.trailer.botStreamUrl,
+      isTrailer: true,
+    };
+    handlePlayEpisode(anime, trailerEp, 0);
+  };
+
   const handlePlayEpisodeFromCloud = (anime: CloudAnime, ep: CloudEpisode) => {
     handlePlayEpisode(cloudAnimeToAnime(anime), cloudEpisodeToEpisode(ep, anime));
   };
@@ -392,20 +408,14 @@ export default function App() {
                   </div>
                   <h2 className="font-display text-2xl font-bold text-white">Nothing published yet</h2>
                   <p className="text-sm text-zinc-400 leading-relaxed">
-                    Register your studio and upload your first episode. It goes live on this page right away.
+                    Sign up with your studio and upload your first episode. It goes live on this page right away.
                   </p>
                   <div className="flex items-center justify-center gap-3 pt-1">
                     <button
-                      onClick={() => openStudioAuth('register')}
+                      onClick={() => openStudioAuth('login')}
                       className="px-5 py-2.5 rounded-xl bg-brand hover:bg-brand-deep text-white font-bold text-sm transition-colors"
                     >
-                      Register a studio
-                    </button>
-                    <button
-                      onClick={() => openStudioAuth('login')}
-                      className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-line text-white font-semibold text-sm transition-colors"
-                    >
-                      Studio login
+                      Login / Sign up
                     </button>
                   </div>
                 </div>
@@ -433,7 +443,7 @@ export default function App() {
             studioSession={studioSession}
             onOpenOwnerDashboard={() => openDashboard('owner-dashboard')}
             onOpenStudioDashboard={() => openDashboard('studio-dashboard')}
-            onRegisterStudio={() => openStudioAuth('register')}
+            onRegisterStudio={() => openStudioAuth('login')}
           />
         )}
       </main>
@@ -445,6 +455,10 @@ export default function App() {
           onPlayEpisode={(anime, ep) => {
             setDetailAnime(null);
             handlePlayEpisode(anime, ep);
+          }}
+          onPlayTrailer={(anime) => {
+            setDetailAnime(null);
+            handlePlayTrailer(anime);
           }}
           onSelectStudio={(name) => {
             setDetailAnime(null);
