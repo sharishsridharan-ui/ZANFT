@@ -25,6 +25,8 @@ export function cloudEpisodeToEpisode(ep: CloudEpisode, anime: CloudAnime): Epis
     thumbnail: ep.thumbnail || anime.poster,
     synopsis: ep.synopsis,
     videoUrl: ep.videoUrl,
+    botStreamUrl: ep.botStreamUrl,
+    releaseDate: ep.releaseDate,
   };
 }
 
@@ -47,6 +49,11 @@ export function cloudAnimeToAnime(ca: CloudAnime): Anime {
     year: ca.year || new Date().getFullYear(),
     seasons: 1,
     episodesCount: episodes.length,
+    createdAt: ca.createdAt,
+    trailer: ca.trailer || undefined,
+    featured: ca.featured,
+    trending: ca.trending,
+    topTenRank: ca.topTenRank,
   };
 }
 
@@ -57,11 +64,14 @@ export function cloudStudioToStudio(cs: CloudStudio): Studio {
     slug: cs.slug || cs.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
     logo: cs.logo || '',
     banner: cs.banner || '',
+    mobileBanner: cs.mobileBanner || '',
+    location: cs.location || '',
     bio: cs.bio || '',
     established: 2025,
-    country: 'International',
+    country: cs.location || 'International',
     verified: cs.verified !== false,
     followersCount: '0',
+    createdAt: cs.createdAt,
     theme: cs.theme,
   };
 }
