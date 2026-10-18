@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import { Film, Send } from 'lucide-react';
-import { Anime, Episode, WatchProgress, StudioSession, OwnerSession, Studio } from './types';
+import { Anime, Episode, WatchProgress, StudioSession, OwnerSession, Studio, ContentCategory } from './types';
 import {
   getStoredStudios,
   getStoredAnime,
@@ -35,6 +35,7 @@ import { Navbar, TabId } from './components/Navbar';
 import { HeroBanner } from './components/HeroBanner';
 import { AnimeRow } from './components/AnimeRow';
 import { CatalogPage } from './components/CatalogPage';
+import { CATEGORIES, categoryOf } from './utils/content';
 import { ContinueWatchingRow } from './components/ContinueWatchingRow';
 import { StudiosDirectory } from './components/StudiosDirectory';
 import { AnimeDetailModal } from './components/AnimeDetailModal';
@@ -247,8 +248,8 @@ export default function App() {
     };
   }, []);
 
-  const tvAnime = useMemo(() => animeList.filter((a) => a.type === 'Series' || a.type === 'TV Series'), [animeList]);
-  const movieAnime = useMemo(() => animeList.filter((a) => a.type === 'Movie'), [animeList]);
+  // Every folder belongs to one of six categories. Older folders (made before categories) count as anime.
+  const itemsIn = (cats: ContentCategory[]) => animeList.filter((a) => cats.includes(categoryOf(a)));
 
   /* ---------- playback ---------- */
 
@@ -398,8 +399,9 @@ export default function App() {
               {animeList.length > 0 ? (
                 <>
                   <AnimeRow title="New from fandub studios" subtitle="Latest uploads" items={animeList} {...rowProps} />
-                  <AnimeRow title="Series" subtitle="Multi-episode fandubs" items={tvAnime} {...rowProps} />
-                  <AnimeRow title="Movies" subtitle="Full-length releases" items={movieAnime} {...rowProps} />
+                  {CATEGORIES.map((c) => (
+                    <AnimeRow key={c.id} title={c.label} subtitle={c.blurb} items={itemsIn([c.id])} {...rowProps} />
+                  ))}
                 </>
               ) : (
                 <div className="py-16 text-center space-y-4 max-w-md mx-auto px-4">
@@ -424,12 +426,32 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'anime' && (
-          <CatalogPage title="Series" noun="series" plural="series" items={tvAnime} onSelectAnime={setDetailAnime} onPlayAnime={handlePlayAnime} />
+        {activeTab === 'movies' && (
+          <CatalogPage title="Movies" items={itemsIn(['Movies'])} onSelectAnime={setDetailAnime} onPlayAnime={handlePlayAnime} />
         )}
 
-        {activeTab === 'movies' && (
-          <CatalogPage title="Movies" noun="movie" plural="movies" items={movieAnime} onSelectAnime={setDetailAnime} onPlayAnime={handlePlayAnime} />
+        {activeTab === 'series' && (
+          <CatalogPage title="Series" items={itemsIn(['Series'])} onSelectAnime={setDetailAnime} onPlayAnime={handlePlayAnime} />
+        )}
+
+        {activeTab === 'anime' && (
+          <CatalogPage
+            title="Anime"
+            items={itemsIn(['Anime Series', 'Anime Movies'])}
+            categories={['Anime Series', 'Anime Movies']}
+            onSelectAnime={setDetailAnime}
+            onPlayAnime={handlePlayAnime}
+          />
+        )}
+
+        {activeTab === 'kdrama' && (
+          <CatalogPage
+            title="K-Drama"
+            items={itemsIn(['K-Drama', 'K-Drama Movies'])}
+            categories={['K-Drama', 'K-Drama Movies']}
+            onSelectAnime={setDetailAnime}
+            onPlayAnime={handlePlayAnime}
+          />
         )}
 
         {activeTab === 'studios' && (
