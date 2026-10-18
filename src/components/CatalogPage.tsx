@@ -1,22 +1,29 @@
 import React, { useMemo, useState } from 'react';
 import { Film } from 'lucide-react';
-import { Anime } from '../types';
+import { Anime, ContentCategory } from '../types';
 import { PosterCard } from './PosterCard';
 import { SORT_OPTIONS, SortKey, sortAnime } from '../utils/mappers';
+import { categoryOf } from '../utils/content';
 
 interface CatalogPageProps {
   title: string;
-  noun: string;
-  plural: string;
   items: Anime[];
+  /** When there is more than one, filter chips are shown (e.g. Anime Series / Anime Movies). */
+  categories?: ContentCategory[];
   onSelectAnime: (anime: Anime) => void;
   onPlayAnime: (anime: Anime) => void;
 }
 
-/** One catalogue page for both Series and Movies. */
-export const CatalogPage: React.FC<CatalogPageProps> = ({ title, noun, plural, items, onSelectAnime, onPlayAnime }) => {
+/** One catalogue page used for Movies, Series, Anime and K-Drama. */
+export const CatalogPage: React.FC<CatalogPageProps> = ({ title, items, categories = [], onSelectAnime, onPlayAnime }) => {
   const [sortBy, setSortBy] = useState<SortKey>('popular');
-  const sorted = useMemo(() => sortAnime(items, sortBy), [items, sortBy]);
+  const [filter, setFilter] = useState<ContentCategory | 'All'>('All');
+
+  const shown = useMemo(
+    () => (filter === 'All' ? items : items.filter((a) => categoryOf(a) === filter)),
+    [items, filter]
+  );
+  const sorted = useMemo(() => sortAnime(shown, sortBy), [shown, sortBy]);
 
   return (
     <div className="pt-32 sm:pt-28 pb-20 px-4 sm:px-8 max-w-7xl mx-auto space-y-8">
@@ -24,7 +31,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ title, noun, plural, i
         <div>
           <h1 className="font-display text-4xl sm:text-5xl font-extrabold text-white">{title}</h1>
           <p className="text-sm text-zinc-400 mt-1">
-            {sorted.length} {sorted.length === 1 ? noun : plural}
+            {sorted.length} {sorted.length === 1 ? 'title' : 'titles'}
           </p>
         </div>
 
@@ -44,10 +51,28 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ title, noun, plural, i
         </label>
       </header>
 
+      {categories.length > 1 && (
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label={`${title} categories`}>
+          {(['All', ...categories] as (ContentCategory | 'All')[]).map((c) => (
+            <button
+              key={c}
+              role="tab"
+              aria-selected={filter === c}
+              onClick={() => setFilter(c)}
+              className={`px-4 py-1.5 rounded-full text-sm font-bold transition-colors cursor-pointer ${
+                filter === c ? 'bg-brand text-white' : 'bg-white/5 text-zinc-300 hover:bg-white/10 border border-line'
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+
       {sorted.length === 0 ? (
         <div className="py-16 text-center max-w-md mx-auto space-y-3">
           <Film className="w-10 h-10 text-zinc-600 mx-auto" />
-          <h2 className="font-display text-lg font-bold text-white">No {plural} yet</h2>
+          <h2 className="font-display text-lg font-bold text-white">Nothing here yet</h2>
           <p className="text-sm text-zinc-400">
             Studios publish from their dashboard. New releases show up here as soon as they go live.
           </p>

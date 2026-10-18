@@ -3,6 +3,7 @@ import { Building2, ChevronRight } from 'lucide-react';
 import { Anime } from '../types';
 import { countText } from '../data/labels';
 
+import { categoryOf } from '../utils/content';
 interface HeroBannerProps {
   anime?: Anime | null;
   onPlay?: (anime: Anime) => void;
@@ -27,7 +28,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             Welcome to <span className="text-[#E50914]">ZANFT</span>
           </h1>
           <p className="text-sm text-zinc-300 max-w-md mx-auto leading-relaxed">
-            Stream your favorite independent fandub anime series and theatrical movies in Ultra HD! Discover exclusive, high-quality releases published directly by creators.
+            Watch fandub movies, series, anime and K-Drama published directly by the studios that dub them.
           </p>
         </div>
       </div>
@@ -86,7 +87,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               <ChevronRight className="w-3 h-3 opacity-70" />
             </button>
             <div className="flex items-center space-x-2 text-zinc-300 font-semibold text-xs">
-              <span>{anime.type}</span>
+              <span>{categoryOf(anime)}</span>
               <span aria-hidden="true" className="text-zinc-600">·</span>
               <span className="text-zinc-400 font-mono">{countText(anime, anime.episodesCount)}</span>
             </div>
@@ -109,8 +110,6 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             <span>{anime.year}</span>
             <span aria-hidden="true" className="text-zinc-600">·</span>
             <span>{countText(anime, anime.episodesCount)}</span>
-            <span aria-hidden="true" className="text-zinc-600">·</span>
-            <span className="text-zinc-300">Sakuga Ultra HD</span>
           </div>
 
           {/* Synopsis */}

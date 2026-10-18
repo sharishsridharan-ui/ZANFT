@@ -6,6 +6,7 @@ import { getGoogleDriveStreamInfo } from '../firebase';
 import { countText } from '../data/labels';
 import { telegramUrl, instagramUrl } from '../utils/cast';
 
+import { categoryOf } from '../utils/content';
 interface AnimeDetailModalProps {
   anime: Anime | null;
   onClose: () => void;
@@ -39,7 +40,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
     const targetEpisode = ep || (episodes.length > 0 ? episodes[0] : null);
     const episodeSuffix = targetEpisode ? ` - Ep ${targetEpisode.number}` : '';
     const shareTitle = `${anime.title}${episodeSuffix}`;
-    const shareText = 'Check out this anime episode on ZANFT!';
+    const shareText = 'Watch this on ZANFT!';
     const shareUrl = `${window.location.origin}${window.location.pathname}?anime=${encodeURIComponent(anime.id)}${targetEpisode ? `&ep=${encodeURIComponent(targetEpisode.id)}` : ''}`;
 
     if (navigator.share) {
@@ -119,7 +120,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                 {/* Floating Badges */}
                 <div className="absolute top-3 left-3 flex items-center gap-2">
                   <span className="px-2.5 py-1 rounded-full bg-brand text-white text-[10px] font-black uppercase tracking-wider shadow-lg">
-                    {anime.type}
+                    {categoryOf(anime)}
                   </span>
                   <span className="px-2 py-0.5 rounded-full bg-black/70 backdrop-blur-md text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
                     {anime.matchPercentage || 98}% Score

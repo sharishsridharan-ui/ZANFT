@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
 import { Anime } from '../types';
 import { countText } from '../data/labels';
 
+import { categoryOf } from '../utils/content';
 interface AnimeRowProps {
   id?: string;
   title: string;
@@ -127,7 +128,7 @@ export const AnimeRow: React.FC<AnimeRowProps> = ({
                       <div className="flex items-center space-x-1.5 text-[10px] text-zinc-300 pt-0.5 font-medium">
                         <span>{anime.year}</span>
                         <span>·</span>
-                        <span>{anime.type}</span>
+                        <span>{categoryOf(anime)}</span>
                         <span>·</span>
                         <span>{anime.type === 'Movie' ? countText(anime, anime.episodesCount) : `${anime.episodesCount} eps`}</span>
                       </div>
@@ -157,7 +158,7 @@ export const AnimeRow: React.FC<AnimeRowProps> = ({
                       {anime.title}
                     </h4>
                     <p className="text-[11px] text-zinc-400 truncate">
-                      {anime.studioName} · {anime.type}
+                      {anime.studioName} · {categoryOf(anime)}
                     </p>
                   </div>
                 )}
