@@ -52,6 +52,7 @@ export function cloudAnimeToAnime(ca: CloudAnime): Anime {
     createdAt: ca.createdAt,
     trailer: ca.trailer || undefined,
     cast: ca.cast,
+    category: ca.category,
     featured: ca.featured,
     trending: ca.trending,
     topTenRank: ca.topTenRank,
