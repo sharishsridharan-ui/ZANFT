@@ -51,6 +51,16 @@ export interface CrewMember {
   avatar?: string;
 }
 
+export type CastRole = 'Main' | 'Side' | 'Background';
+
+export interface CastMember {
+  id: string;
+  characterName: string; // the character the dubber voiced
+  role: CastRole;
+  telegramId: string; // handle only, e.g. zen_dubber
+  instagramId: string; // handle only
+}
+
 export interface Anime {
   id: string;
   title: string;
@@ -72,6 +82,7 @@ export interface Anime {
   topTenRank?: number;
   trailerUrl?: string;
   crew?: CrewMember[];
+  cast?: CastMember[]; // voice cast shown on the detail page
   trailer?: Trailer;
   episodes: Episode[];
   createdAt?: string;
