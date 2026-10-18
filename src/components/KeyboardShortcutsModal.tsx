@@ -41,7 +41,7 @@ const SHORTCUTS: ShortcutItem[] = [
   {
     key: 'D',
     label: 'Studios',
-    description: 'Open verified fandub studios directory',
+    description: 'Open the studios directory',
     category: 'Navigation'
   },
   {

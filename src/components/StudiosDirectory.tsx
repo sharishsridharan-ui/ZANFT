@@ -1,5 +1,6 @@
+import { formatJoinDateOnly } from '../data/labels';
 import React, { useState, useMemo } from 'react';
-import { Search, Building2, Award, Calendar, MapPin, CheckCircle, ArrowLeft, Instagram, Crown } from 'lucide-react';
+import { Search, Building2, Award, Calendar, MapPin, ArrowLeft, Instagram, Crown } from 'lucide-react';
 import { Studio, Anime } from '../types';
 
 interface StudiosDirectoryProps {
@@ -119,11 +120,6 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
                   <h1 className="font-display text-3xl sm:text-5xl font-black text-white tracking-tight">
                     {selectedStudio.name}
                   </h1>
-                  {selectedStudio.verified && (
-                    <span title="Verified Official ZANFT Partner">
-                      <CheckCircle className="w-5 h-5 text-brand" />
-                    </span>
-                  )}
                 </div>
 
                 {/* Clean Unboxed Metadata */}
@@ -132,15 +128,15 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
                     <MapPin className="w-3.5 h-3.5 text-zinc-500" />
                     <span>{selectedStudio.country}</span>
                   </span>
-                  <span aria-hidden="true" className="text-zinc-600">·</span>
-                  <span className="flex items-center space-x-1">
-                    <Calendar className="w-3.5 h-3.5 text-zinc-500" />
-                    <span>Est. {selectedStudio.established}</span>
-                  </span>
-                  <span aria-hidden="true" className="text-zinc-600">·</span>
-                  <span className="text-zinc-300 font-bold">
-                    Studio Joined On: {new Date(selectedStudio.createdAt || '2025-01-01').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </span>
+                  {formatJoinDateOnly(selectedStudio.createdAt) && (
+                    <>
+                      <span aria-hidden="true" className="text-zinc-600">·</span>
+                      <span className="flex items-center space-x-1 text-zinc-300 font-bold">
+                        <Calendar className="w-3.5 h-3.5 text-zinc-500" />
+                        <span>Joined {formatJoinDateOnly(selectedStudio.createdAt)}</span>
+                      </span>
+                    </>
+                  )}
                   <span aria-hidden="true" className="text-zinc-600">·</span>
                   <span className="text-brand font-bold">{totalWorks} Productions on ZANFT</span>
                 </div>
@@ -405,11 +401,6 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
                       <span className="text-xs font-bold text-brand block">
                         {worksCount} Titles
                       </span>
-                      {studio.createdAt && (
-                        <span className="text-[11px] text-zinc-400 block">
-                          Joined {new Date(studio.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                        </span>
-                      )}
                     </div>
                   </div>
 
@@ -418,15 +409,16 @@ export const StudiosDirectory: React.FC<StudiosDirectoryProps> = ({
                       <h3 className="font-display text-lg font-bold text-white group-hover:text-brand transition-colors">
                         {studio.name}
                       </h3>
-                      {studio.verified && (
-                        <CheckCircle className="w-4 h-4 text-brand" />
-                      )}
                     </div>
                     <p className="text-[11px] text-zinc-400 flex items-center space-x-1 mt-0.5">
                       <MapPin className="w-3 h-3 text-zinc-500" />
                       <span>{studio.country}</span>
-                      <span>·</span>
-                      <span>Est. {studio.established}</span>
+                      {formatJoinDateOnly(studio.createdAt) && (
+                        <>
+                          <span>·</span>
+                          <span>Joined {formatJoinDateOnly(studio.createdAt)}</span>
+                        </>
+                      )}
                     </p>
                   </div>
 

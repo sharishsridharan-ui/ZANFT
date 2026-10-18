@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Play, Film, Building2, Share2, Check, Clock, Sparkles, Clapperboard } from 'lucide-react';
+import { X, Play, Film, Building2, Share2, Check, Clock, Sparkles, Clapperboard, Send, Instagram } from 'lucide-react';
 import { Anime, Episode } from '../types';
 import { StarRating } from './StarRating';
 import { getGoogleDriveStreamInfo } from '../firebase';
+import { countText } from '../data/labels';
+import { telegramUrl, instagramUrl } from '../utils/cast';
 
 interface AnimeDetailModalProps {
   anime: Anime | null;
@@ -179,7 +181,7 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                   <span className="text-zinc-600">·</span>
                   <span className="text-zinc-400 text-xs font-semibold">{anime.year || 2025}</span>
                   <span className="text-zinc-600">·</span>
-                  <span className="text-zinc-400 text-xs font-semibold">{episodes.length} Episodes</span>
+                  <span className="text-zinc-400 text-xs font-semibold">{countText(anime, episodes.length)}</span>
                 </div>
 
                 <h1 className="font-display font-black text-2xl sm:text-3xl lg:text-4xl text-white tracking-tight leading-tight">
@@ -218,6 +220,60 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                 </p>
               </div>
 
+              {/* Voice cast */}
+              {anime.cast && anime.cast.length > 0 && (
+                <div className="pt-3 border-t border-white/10 space-y-3">
+                  <h3 className="font-display font-bold text-white text-base sm:text-lg">Voice Cast</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {anime.cast.map((m) => (
+                      <div
+                        key={m.id}
+                        className="p-3 rounded-2xl bg-black/40 border border-white/5 flex items-center justify-between gap-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-white truncate">{m.characterName}</p>
+                          <span
+                            className={`inline-block mt-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                              m.role === 'Main'
+                                ? 'bg-brand/20 text-brand'
+                                : m.role === 'Side'
+                                ? 'bg-amber/15 text-amber'
+                                : 'bg-white/10 text-zinc-300'
+                            }`}
+                          >
+                            {m.role}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          {m.telegramId && (
+                            <a
+                              href={telegramUrl(m.telegramId)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`Telegram: @${m.telegramId}`}
+                              className="w-8 h-8 rounded-lg bg-sky-500/15 hover:bg-sky-500/30 text-sky-300 flex items-center justify-center transition-colors"
+                            >
+                              <Send className="w-4 h-4" />
+                            </a>
+                          )}
+                          {m.instagramId && (
+                            <a
+                              href={instagramUrl(m.instagramId)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`Instagram: @${m.instagramId}`}
+                              className="w-8 h-8 rounded-lg bg-pink-500/15 hover:bg-pink-500/30 text-pink-300 flex items-center justify-center transition-colors"
+                            >
+                              <Instagram className="w-4 h-4" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Rating */}
               <div className="pt-3 border-t border-white/10 space-y-2">
                 <h3 className="text-xs uppercase tracking-widest text-zinc-400 font-bold">
@@ -230,14 +286,14 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
               <div className="pt-3 border-t border-white/10 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="font-display font-bold text-white text-base sm:text-lg">
-                    Available Episodes ({episodes.length})
+                    Available {anime.type === 'Movie' ? 'Movies' : 'Episodes'} ({episodes.length})
                   </h3>
                   
                 </div>
 
                 {episodes.length === 0 ? (
                   <p className="text-xs text-zinc-500 italic py-4">
-                    No episodes uploaded yet for this title.
+                    Nothing uploaded yet for this title.
                   </p>
                 ) : (
                   <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
@@ -255,8 +311,8 @@ export const AnimeDetailModal: React.FC<AnimeDetailModalProps> = ({
                             onClick={() => onPlayEpisode(anime, ep)}
                             className="flex items-center space-x-3 min-w-0 flex-1 cursor-pointer"
                           >
-                            <span className="w-8 h-8 rounded-xl bg-white/5 group-hover:bg-brand text-zinc-300 group-hover:text-white font-mono text-xs font-bold flex items-center justify-center flex-shrink-0 transition-colors">
-                              #{ep.number}
+                            <span className="h-8 px-2.5 rounded-xl bg-white/5 group-hover:bg-brand text-zinc-300 group-hover:text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0 whitespace-nowrap transition-colors">
+                              {anime.type === 'Movie' ? 'Movie' : 'Episode'} {ep.number}
                             </span>
 
                             {thumb ? (

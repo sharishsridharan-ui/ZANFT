@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import {
-  Building2,
   Plus,
   Film,
   Tv,
@@ -36,11 +35,14 @@ import {
   deleteStudio,
   setAnimeTrailer
 } from '../services/firestoreService';
-import { StudioSession, Trailer } from '../types';
+import { StudioSession, Trailer, CastMember } from '../types';
+import { CastEditor } from './CastEditor';
+import { cleanCast, castRowStarted } from '../utils/cast';
 import { getGoogleDriveStreamInfo } from '../firebase';
 import { countText, formatJoinDate } from '../data/labels';
 import {
   StreamLinkFields,
+  ThumbnailField,
   TrailerStepFields,
   TrailerEditorModal,
   emptyTrailerDraft,
@@ -159,6 +161,59 @@ export const STUDIO_THEMES: StudioThemeOption[] = [
   }
 ];
 
+const ImageRow: React.FC<{
+  label: string;
+  hint: string;
+  value: string;
+  onChange: (v: string) => void;
+  onUpload: () => void;
+  previewClass: string;
+}> = ({ label, hint, value, onChange, onUpload, previewClass }) => {
+  const isUploaded = value.startsWith('data:');
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-2xl bg-black/30 border border-white/10">
+      <div className={`${previewClass} rounded-xl overflow-hidden border border-white/15 bg-zinc-900 flex-shrink-0`}>
+        {value.trim() ? (
+          <img src={value.trim()} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500">None</div>
+        )}
+      </div>
+      <div className="flex-1 min-w-0 space-y-2">
+        <div>
+          <p className="text-sm font-bold text-white">{label}</p>
+          <p className="text-[11px] text-zinc-400">{hint}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onUpload}
+            className="h-8 px-3 flex-shrink-0 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold cursor-pointer"
+          >
+            Upload
+          </button>
+          <input
+            type="text"
+            value={isUploaded ? '' : value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={isUploaded ? 'Uploaded image' : 'or paste an image link'}
+            className="h-8 min-w-0 flex-1 px-2.5 bg-black/40 border border-white/10 rounded-lg text-white text-xs focus:outline-none focus:border-brand"
+          />
+          {value && (
+            <button
+              type="button"
+              onClick={() => onChange('')}
+              className="text-[11px] text-zinc-400 hover:text-red-300 flex-shrink-0 cursor-pointer"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 interface StudioDashboardProps {
   session: StudioSession;
   allAnime: CloudAnime[];
@@ -230,7 +285,13 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
   // Step 1: Format ("Series" vs "Movie")
   // Step 2: Details & Dual Posters (Landscape 16:9 + Portrait 2:3)
   // Step 3: Initial Episode & Drive Stream Link
-  const [createStep, setCreateStep] = useState<1 | 2 | 3 | 4>(1);
+  const [createStep, setCreateStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const [showStep2Errors, setShowStep2Errors] = useState(false);
+  const [showStep4Errors, setShowStep4Errors] = useState(false);
+  const [showCastErrors, setShowCastErrors] = useState(false);
+  const [epThumb, setEpThumb] = useState(''); // thumbnail of the first video
+  const [castDraft, setCastDraft] = useState<CastMember[]>([]);
+  const [editCast, setEditCast] = useState<CastMember[]>([]);
   const [folderType, setFolderType] = useState<'Series' | 'Movie'>('Series');
   const [folderTitle, setFolderTitle] = useState('');
   const [selectedGenres, setSelectedGenres] = useState<string[]>(['Action', 'Fantasy']);
@@ -260,6 +321,8 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
   const [singleEpVideoUrl, setSingleEpVideoUrl] = useState(''); // Drive link
   const [singleEpBotUrl, setSingleEpBotUrl] = useState(''); // Telegram bot stream link
   const [singleEpDuration, setSingleEpDuration] = useState('24m');
+  const [singleEpThumb, setSingleEpThumb] = useState('');
+  const [showSingleErrors, setShowSingleErrors] = useState(false);
 
   // In-App Delete Confirmation State
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{
@@ -379,6 +442,11 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
     setTrailerMode('now');
     setTrailerDraft(emptyTrailerDraft);
     setEpDuration('24m');
+    setEpThumb('');
+    setCastDraft([]);
+    setShowStep2Errors(false);
+    setShowStep4Errors(false);
+    setShowCastErrors(false);
     setIsCreateFolderOpen(true);
   };
 
@@ -456,25 +524,71 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
     }
   };
 
-  // Submit new folder with initial episode
-  const handleCreateFolderSubmit = async (e: React.FormEvent) => {
+  // Step 2 needs every field. Missing ones are marked red once the studio presses Next.
+  const step2Missing = {
+    title: !folderTitle.trim(),
+    genres: selectedGenres.length === 0,
+    banner: !folderBanner.trim(),
+    poster: !folderPoster.trim(),
+    synopsis: !folderSynopsis.trim()
+  };
+  const step2Invalid = Object.values(step2Missing).some(Boolean);
+
+  // Step 4 needs a number, a title, at least one link and the video's own thumbnail.
+  const step4Missing = {
+    number: !epNumber || epNumber < 1,
+    title: !epTitle.trim(),
+    links: !epVideoUrl.trim() && !epBotUrl.trim(),
+    thumb: !epThumb
+  };
+  const step4Invalid = Object.values(step4Missing).some(Boolean);
+
+  const scrollToFirstError = () => {
+    setTimeout(() => {
+      document.querySelector('[data-field-error="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+  };
+
+  const handleStep2Next = () => {
+    setShowStep2Errors(true);
+    if (step2Invalid) {
+      scrollToFirstError();
+      return;
+    }
+    setCreateStep(3);
+  };
+
+  const handleStep4Next = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!folderTitle.trim()) {
-      showNotification('Folder Name is required.', true);
+    setShowStep4Errors(true);
+    if (step4Invalid) {
+      scrollToFirstError();
       return;
     }
-    if (selectedGenres.length === 0) {
-      showNotification('Please select at least one genre.', true);
+    setCreateStep(5);
+  };
+
+  // Final step: publish the folder with its first video and the cast
+  const handleCreateFolderSubmit = async () => {
+    if (loading) return; // blocks a second click while the first save is running
+    if (step2Invalid) {
+      setShowStep2Errors(true);
+      setCreateStep(2);
       return;
     }
-    if (!epVideoUrl.trim() && !epBotUrl.trim()) {
-      showNotification('Add at least one link: Bot link or Drive link.', true);
+    if (step4Invalid) {
+      setShowStep4Errors(true);
+      setCreateStep(4);
+      return;
+    }
+    if (castDraft.some((m) => castRowStarted(m) && !m.characterName.trim())) {
+      setShowCastErrors(true);
+      scrollToFirstError();
       return;
     }
 
-    // Fallback if one poster is provided
-    const resolvedPoster = folderPoster.trim() || folderBanner.trim() || '';
-    const resolvedBanner = folderBanner.trim() || folderPoster.trim() || '';
+    const resolvedPoster = folderPoster.trim();
+    const resolvedBanner = folderBanner.trim();
 
     setLoading(true);
     try {
@@ -488,12 +602,14 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
           banner: resolvedBanner,
           initialEpisode: {
             number: epNumber,
-            title: epTitle.trim() || (folderType === 'Movie' ? 'Full Movie' : `Episode ${epNumber}`),
+            title: epTitle.trim(),
             videoUrl: epVideoUrl.trim(),
             botStreamUrl: epBotUrl.trim(),
-            duration: epDuration.trim() || (folderType === 'Movie' ? '1h 45m' : '24m')
+            duration: epDuration.trim() || (folderType === 'Movie' ? '1h 45m' : '24m'),
+            thumbnail: epThumb
           },
-          trailer: trailerMode === 'now' ? draftToTrailer(trailerDraft) : null
+          trailer: trailerMode === 'now' ? draftToTrailer(trailerDraft) : null,
+          cast: cleanCast(castDraft)
         },
         session.studioId,
         session.studioName
@@ -517,6 +633,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
     setFolderSynopsis(anime.synopsis || '');
     setEditFolderPoster(anime.poster || '');
     setEditFolderBanner(anime.banner || anime.poster || '');
+    setEditCast(anime.cast || []);
   };
 
   // Edit existing folder details
@@ -541,7 +658,8 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
           genres: selectedGenres,
           synopsis: folderSynopsis.trim(),
           poster: resolvedPoster,
-          banner: resolvedBanner
+          banner: resolvedBanner,
+          cast: cleanCast(editCast)
         },
         session.studioId,
         false
@@ -564,7 +682,11 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
       return;
     }
     if (!singleEpVideoUrl.trim() && !singleEpBotUrl.trim()) {
-      showNotification('Add at least one link: Bot link or Drive link.', true);
+      setShowSingleErrors(true);
+      return;
+    }
+    if (!editingEpisodeId && !singleEpThumb) {
+      setShowSingleErrors(true);
       return;
     }
 
@@ -575,7 +697,8 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
         title: singleEpTitle.trim(),
         videoUrl: singleEpVideoUrl.trim(),
         botStreamUrl: singleEpBotUrl.trim(),
-        duration: singleEpDuration.trim()
+        duration: singleEpDuration.trim(),
+        thumbnail: singleEpThumb
       };
       const noun = selectedAnimeForEpisode.type === 'Movie' ? 'Movie' : 'Episode';
       if (editingEpisodeId) {
@@ -655,18 +778,6 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
             <div className="w-full h-full bg-gradient-to-r from-[#0e101d] via-[#15192d] to-[#0a0c16] opacity-80" />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-[#0E101D] via-[#0E101D]/50 to-transparent" />
-
-          {/* Clean Edit Option on Banner Top Right (No standalone banner button) */}
-          <div className="absolute top-4 right-4 flex items-center">
-            <button
-              onClick={handleOpenProfileModal}
-              className="px-3.5 py-1.5 rounded-xl bg-black/60 hover:bg-black/85 backdrop-blur-md border border-white/20 text-white text-xs font-bold flex items-center space-x-1.5 shadow-lg transition-all cursor-pointer active:scale-95"
-              title="Edit studio details & banners"
-            >
-              <Edit3 className="w-3.5 h-3.5" style={{ color: activeTheme.primary }} />
-              <span>Edit Details</span>
-            </button>
-          </div>
         </div>
 
         {/* Profile Info Bar */}
@@ -705,10 +816,6 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                 <h1 className="font-syne text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight break-words">
                   {currentStudio?.name || session.studioName}
                 </h1>
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold inline-flex items-center space-x-1">
-                  <CheckCircle2 className="w-3 h-3" />
-                  <span>Verified Studio</span>
-                </span>
                 <span
                   className="px-2.5 py-0.5 rounded-full border text-[10px] font-bold inline-flex items-center space-x-1"
                   style={{
@@ -747,7 +854,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
           <div className="flex flex-row flex-wrap sm:flex-nowrap items-center gap-2.5 w-full md:w-auto pt-2 md:pt-0">
             <button
               onClick={handleOpenProfileModal}
-              className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-4 py-2.5 bg-white/10 hover:bg-white/15 border border-white/20 text-white text-xs font-bold rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
+              className="h-10 flex-1 sm:flex-none sm:w-36 flex items-center justify-center gap-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer border bg-white/10 hover:bg-white/15 border-white/20 text-white"
             >
               <Edit3 className="w-4 h-4" style={{ color: activeTheme.primary }} />
               <span>Edit Details</span>
@@ -755,7 +862,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
 
             <button
               onClick={() => setIsDeleteStudioModalOpen(true)}
-              className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-3.5 py-2.5 bg-red-950/40 hover:bg-red-900/50 text-red-400 hover:text-red-300 border border-red-500/30 text-xs font-semibold rounded-xl transition-all active:scale-95 cursor-pointer"
+              className="h-10 flex-1 sm:flex-none sm:w-36 flex items-center justify-center gap-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer border bg-red-950/40 hover:bg-red-900/50 text-red-400 hover:text-red-300 border-red-500/30"
               title="Delete this studio permanently"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -764,7 +871,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
 
             <button
               onClick={onLogout}
-              className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-white/10 text-xs font-semibold rounded-xl transition-all active:scale-95 cursor-pointer"
+              className="h-10 flex-1 sm:flex-none sm:w-36 flex items-center justify-center gap-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer border bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white border-white/10"
             >
               <LogOut className="w-4 h-4" />
               <span>Logout</span>
@@ -976,6 +1083,8 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                             setSingleEpTitle(anime.type === 'Movie' ? 'Feature Film' : `Episode ${nextNum}`);
                             setSingleEpVideoUrl('');
                             setSingleEpBotUrl('');
+                            setSingleEpThumb('');
+                            setShowSingleErrors(false);
                             setSingleEpDuration(anime.type === 'Movie' ? '1h 45m' : '24m');
                           }}
                           className="inline-flex items-center gap-2 whitespace-nowrap text-xs font-bold text-[#E50914] hover:text-red-400 cursor-pointer"
@@ -1009,8 +1118,8 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                               className="flex items-center justify-between gap-4 p-3 rounded-lg bg-slate-900/60 border border-white/5 text-xs hover:border-white/15 transition-all"
                             >
                               <div className="flex items-center space-x-2.5 min-w-0">
-                                <span className="font-mono font-bold text-[#E50914] w-6 text-center">
-                                  #{ep.number}
+                                <span className="font-bold text-[#E50914] text-xs w-[4.5rem] flex-shrink-0">
+                                  {anime.type === 'Movie' ? 'Movie' : 'Episode'} {ep.number}
                                 </span>
                                 {epThumb && epThumb.trim() !== '' && (
                                   <img
@@ -1051,6 +1160,8 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                                     setSingleEpTitle(ep.title);
                                     setSingleEpVideoUrl(ep.videoUrl || '');
                                     setSingleEpBotUrl(ep.botStreamUrl || '');
+                                    setSingleEpThumb(ep.thumbnail || '');
+                                    setShowSingleErrors(false);
                                     setSingleEpDuration(ep.duration || '24m');
                                   }}
                                   className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-zinc-200 hover:text-white transition-colors cursor-pointer"
@@ -1108,7 +1219,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                     Create New Anime Folder
                   </h3>
                   <p className="text-xs text-zinc-400">
-                    Step {createStep} of 4: {createStep === 1 ? 'Format Selection' : createStep === 2 ? 'Details & Dual Posters' : createStep === 3 ? 'Trailer' : `Attach First ${folderType === 'Movie' ? 'Movie' : 'Episode'}`}
+                    Step {createStep} of 5: {createStep === 1 ? 'Format' : createStep === 2 ? 'Details & Posters' : createStep === 3 ? 'Trailer' : createStep === 4 ? `First ${folderType === 'Movie' ? 'Movie' : 'Episode'}` : 'Voice Cast'}
                   </p>
                 </div>
               </div>
@@ -1211,24 +1322,31 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
             {/* STEP 2: Name, Genres, Dual Posters (Netflix & Crunchyroll style) */}
             {createStep === 2 && (
               <div className="flex-1 overflow-y-auto space-y-4 py-1 pr-1 text-xs">
-                <div className="space-y-1">
+                <div className="space-y-1" data-field-error={showStep2Errors && step2Missing.title ? 'true' : undefined}>
                   <label className="font-semibold text-zinc-300">Anime / Folder Name</label>
                   <input
                     type="text"
-                    required
                     value={folderTitle}
                     onChange={(e) => setFolderTitle(e.target.value)}
                     placeholder="e.g. Solo Leveling Tamil Dub, Bleach, etc."
-                    className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-[#E50914]"
+                    className={`w-full px-3.5 py-2 bg-black/50 border rounded-xl text-white text-sm focus:outline-none focus:border-[#E50914] ${
+                      showStep2Errors && step2Missing.title ? 'border-red-500' : 'border-white/15'
+                    }`}
                   />
+                  {showStep2Errors && step2Missing.title && (
+                    <p className="text-[11px] font-bold text-red-400">Folder name is required.</p>
+                  )}
                 </div>
 
                 {/* Genre Selector */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between" data-field-error={showStep2Errors && step2Missing.genres ? 'true' : undefined}>
                     <label className="font-semibold text-zinc-300">
                       Genres ({selectedGenres.length} selected)
                     </label>
+                    {showStep2Errors && step2Missing.genres && (
+                      <span className="text-[11px] font-bold text-red-400">Pick at least one genre.</span>
+                    )}
                   </div>
 
                   {selectedGenres.length > 0 && (
@@ -1289,7 +1407,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Option A: Landscape Banner Image URL (for PC / Laptop screens) */}
-                    <div className="p-3.5 rounded-2xl bg-black/60 border border-white/15 space-y-2.5 flex flex-col justify-between">
+                    <div data-field-error={showStep2Errors && step2Missing.banner ? 'true' : undefined} className={`p-3.5 rounded-2xl bg-black/60 border space-y-2.5 flex flex-col justify-between ${showStep2Errors && step2Missing.banner ? 'border-red-500' : 'border-white/15'}`}>
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-zinc-200 text-xs flex items-center space-x-1">
@@ -1305,6 +1423,9 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                         </p>
                       </div>
 
+                      {showStep2Errors && step2Missing.banner && (
+                        <p className="text-[11px] font-bold text-red-400">Upload the landscape banner (16:9).</p>
+                      )}
                       {(folderBanner && folderBanner.trim() !== '') ? (
                         <div className="relative aspect-video rounded-xl overflow-hidden border border-white/20 bg-zinc-900 group">
                           <img src={folderBanner.trim()} alt="Landscape Preview" className="w-full h-full object-cover" />
@@ -1339,7 +1460,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                     </div>
 
                     {/* Option B: 2:3 Portrait Poster Image URL (for Mobile screens) */}
-                    <div className="p-3.5 rounded-2xl bg-black/60 border border-white/15 space-y-2.5 flex flex-col justify-between">
+                    <div data-field-error={showStep2Errors && step2Missing.poster ? 'true' : undefined} className={`p-3.5 rounded-2xl bg-black/60 border space-y-2.5 flex flex-col justify-between ${showStep2Errors && step2Missing.poster ? 'border-red-500' : 'border-white/15'}`}>
                       <div className="space-y-1">
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-zinc-200 text-xs flex items-center space-x-1">
@@ -1355,6 +1476,9 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                         </p>
                       </div>
 
+                      {showStep2Errors && step2Missing.poster && (
+                        <p className="text-[11px] font-bold text-red-400">Upload the 2:3 portrait poster.</p>
+                      )}
                       {(folderPoster && folderPoster.trim() !== '') ? (
                         <div className="relative aspect-[2/3] max-h-36 mx-auto rounded-xl overflow-hidden border border-white/20 bg-zinc-900 group">
                           <img src={folderPoster.trim()} alt="Portrait Preview" className="w-full h-full object-cover" />
@@ -1390,15 +1514,20 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   </div>
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-1" data-field-error={showStep2Errors && step2Missing.synopsis ? 'true' : undefined}>
                   <label className="font-semibold text-zinc-300">Synopsis / Description</label>
                   <textarea
-                    rows={2}
+                    rows={3}
                     value={folderSynopsis}
                     onChange={(e) => setFolderSynopsis(e.target.value)}
-                    placeholder="Enter storyline, voice cast, and fan dub production summary..."
-                    className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-xs focus:outline-none focus:border-[#E50914]"
+                    placeholder="Write the story in a few lines..."
+                    className={`w-full px-3.5 py-2 bg-black/50 border rounded-xl text-white text-xs focus:outline-none focus:border-[#E50914] ${
+                      showStep2Errors && step2Missing.synopsis ? 'border-red-500' : 'border-white/15'
+                    }`}
                   />
+                  {showStep2Errors && step2Missing.synopsis && (
+                    <p className="text-[11px] font-bold text-red-400">Description is required.</p>
+                  )}
                 </div>
 
                 <div className="flex justify-between pt-2">
@@ -1411,13 +1540,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!folderTitle.trim()) {
-                        showNotification('Please enter an anime title', true);
-                        return;
-                      }
-                      setCreateStep(3);
-                    }}
+                    onClick={handleStep2Next}
                     className="flex items-center space-x-2 px-5 py-2.5 bg-[#E50914] hover:bg-[#B0000D] text-white font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer"
                   >
                     <span>Next: Trailer</span>
@@ -1464,38 +1587,55 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
             )}
 
             {createStep === 4 && (
-              <form onSubmit={handleCreateFolderSubmit} className="space-y-4 py-2 text-xs">
+              <form onSubmit={handleStep4Next} noValidate className="flex-1 overflow-y-auto space-y-4 py-2 pr-1 text-xs">
                 <div className="grid grid-cols-3 gap-3">
-                  <div>
+                  <div data-field-error={showStep4Errors && step4Missing.number ? 'true' : undefined}>
                     <label className="font-semibold text-zinc-300">{folderType === 'Movie' ? 'Movie #' : 'Episode #'}</label>
                     <input
                       type="number"
-                      required
                       min={1}
                       value={epNumber}
                       onChange={(e) => setEpNumber(Number(e.target.value))}
-                      className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-[#E50914]"
+                      className={`w-full px-3.5 py-2 bg-black/50 border rounded-xl text-white text-sm focus:outline-none focus:border-[#E50914] ${
+                        showStep4Errors && step4Missing.number ? 'border-red-500' : 'border-white/15'
+                      }`}
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-2" data-field-error={showStep4Errors && step4Missing.title ? 'true' : undefined}>
                     <label className="font-semibold text-zinc-300">{folderType === 'Movie' ? 'Movie Title' : 'Episode Title'}</label>
                     <input
                       type="text"
-                      required
                       value={epTitle}
                       onChange={(e) => setEpTitle(e.target.value)}
                       placeholder={folderType === 'Movie' ? 'Full Theatrical Cut' : 'Episode 1: Thodakkam'}
-                      className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-[#E50914]"
+                      className={`w-full px-3.5 py-2 bg-black/50 border rounded-xl text-white text-sm focus:outline-none focus:border-[#E50914] ${
+                        showStep4Errors && step4Missing.title ? 'border-red-500' : 'border-white/15'
+                      }`}
                     />
+                    {showStep4Errors && step4Missing.title && (
+                      <p className="text-[11px] font-bold text-red-400 mt-1">Title is required.</p>
+                    )}
                   </div>
                 </div>
 
-                <StreamLinkFields
-                  driveUrl={epVideoUrl}
-                  botUrl={epBotUrl}
-                  onDriveChange={setEpVideoUrl}
-                  onBotChange={setEpBotUrl}
-                />
+                <div data-field-error={showStep4Errors && step4Missing.links ? 'true' : undefined}>
+                  <StreamLinkFields
+                    driveUrl={epVideoUrl}
+                    botUrl={epBotUrl}
+                    onDriveChange={setEpVideoUrl}
+                    onBotChange={setEpBotUrl}
+                    invalid={showStep4Errors && step4Missing.links}
+                  />
+                </div>
+
+                <div data-field-error={showStep4Errors && step4Missing.thumb ? 'true' : undefined}>
+                  <ThumbnailField
+                    value={epThumb}
+                    onChange={setEpThumb}
+                    invalid={showStep4Errors}
+                    noun={folderType === 'Movie' ? 'Movie' : 'Episode'}
+                  />
+                </div>
 
                 <div className="flex justify-between pt-2">
                   <button
@@ -1507,6 +1647,39 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   </button>
                   <button
                     type="submit"
+                    className="flex items-center space-x-2 px-5 py-2.5 bg-[#E50914] hover:bg-[#B0000D] text-white font-bold rounded-xl text-xs shadow-md transition-all cursor-pointer"
+                  >
+                    <span>Next: Voice Cast</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {createStep === 5 && (
+              <div className="flex-1 overflow-y-auto space-y-4 py-1 pr-1 text-xs">
+                <div>
+                  <h4 className="font-bold text-white text-sm">Who dubbed this?</h4>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Add each voice with the character, type and their Telegram and Instagram IDs. They appear on the anime page above the rating. You can skip this step.
+                  </p>
+                </div>
+
+                <div data-field-error={showCastErrors ? 'true' : undefined}>
+                  <CastEditor cast={castDraft} onChange={setCastDraft} showErrors={showCastErrors} />
+                </div>
+
+                <div className="flex justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setCreateStep(4)}
+                    className="px-4 py-2 bg-white/5 text-zinc-300 rounded-xl hover:bg-white/10 cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreateFolderSubmit}
                     disabled={loading}
                     className="flex items-center space-x-2 px-6 py-2.5 bg-[#E50914] hover:bg-[#B0000D] disabled:opacity-50 text-white font-bold rounded-xl text-xs shadow-lg shadow-[#E50914]/30 transition-all cursor-pointer"
                   >
@@ -1520,7 +1693,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                     )}
                   </button>
                 </div>
-              </form>
+              </div>
             )}
           </div>
         </div>
@@ -1530,40 +1703,31 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
       {/* MODAL 2: STUDIO PROFILE & EDIT FLOW (Location & Dual Banners) */}
       {/* ========================================================= */}
       {isProfileModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl animate-in fade-in duration-200 overflow-y-auto">
-          <div className="relative w-full max-w-2xl bg-[#0F111D] border border-white/15 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden my-auto max-h-[92vh] flex flex-col">
-            <div
-              className="h-1.5 w-full transition-all duration-300"
-              style={{ backgroundColor: previewTheme.primary }}
-            />
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Edit studio"
+        >
+          <div className="relative w-full max-w-2xl bg-surface border border-white/15 rounded-3xl shadow-2xl my-auto max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="h-1.5 w-full flex-shrink-0 transition-colors" style={{ backgroundColor: previewTheme.primary }} />
 
-            <div className="flex items-center justify-between p-6 pb-4 border-b border-white/10 flex-shrink-0">
-              <div className="flex items-center space-x-3">
-                <div
-                  className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg"
-                  style={{ backgroundColor: `${previewTheme.primary}25`, color: previewTheme.primary }}
-                >
-                  <Building2 className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-syne font-black text-white text-lg tracking-tight">
-                    Studio Details & Dual Banners Setup
-                  </h3>
-                  <p className="text-xs text-zinc-400">
-                    Edit location, PC banner (16:9), Mobile banner, and branding details
-                  </p>
-                </div>
+            <header className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0">
+              <div>
+                <h3 className="font-display font-black text-white text-lg">Edit studio</h3>
+                <p className="text-xs text-zinc-400">Name, images and colour of your public studio page</p>
               </div>
-
               <button
+                type="button"
                 onClick={() => setIsProfileModalOpen(false)}
-                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer"
+                aria-label="Close"
               >
                 <X className="w-4 h-4" />
               </button>
-            </div>
+            </header>
 
-            {/* Hidden File Inputs for Profile */}
+            {/* Hidden file inputs */}
             <input
               type="file"
               ref={logoFileInputRef}
@@ -1573,7 +1737,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                 if (e.target.files?.[0]) {
                   processImageFile(e.target.files[0], 'square', (base64) => {
                     setLogoUrl(base64);
-                    showNotification('Studio logo selected from gallery!');
+                    showNotification('Logo selected.');
                   });
                 }
               }}
@@ -1587,7 +1751,7 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                 if (e.target.files?.[0]) {
                   processImageFile(e.target.files[0], 'landscape', (base64) => {
                     setPcBannerUrl(base64);
-                    showNotification('PC widescreen banner (16:9) selected!');
+                    showNotification('PC banner selected.');
                   });
                 }
               }}
@@ -1601,60 +1765,83 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                 if (e.target.files?.[0]) {
                   processImageFile(e.target.files[0], 'mobileBanner', (base64) => {
                     setMobileBannerUrl(base64);
-                    showNotification('Mobile banner selected!');
+                    showNotification('Mobile banner selected.');
                   });
                 }
               }}
             />
 
-            <form onSubmit={handleSaveProfile} className="flex-1 overflow-y-auto p-6 space-y-5 text-xs pr-4">
-              {/* 1. STUDIO NAME */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-zinc-200 flex items-center justify-between text-xs">
-                  <span>1. Studio Name (Public Brand)</span>
-                  <span className="text-[10px] text-zinc-500 font-mono">{studioName.length}/40</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  maxLength={40}
-                  value={studioName}
-                  onChange={(e) => setStudioName(e.target.value)}
-                  placeholder="e.g. Zen Dub Studios"
-                  className="w-full px-4 py-2.5 bg-black/60 border border-white/15 rounded-xl text-white text-sm font-semibold focus:outline-none focus:border-emerald-400"
-                />
-                <p className="text-[11px] text-zinc-400">
-                  Your studio name will appear across anime folders, video player, and header titles.
-                </p>
+            <form
+              id="studio-profile-form"
+              onSubmit={handleSaveProfile}
+              className="flex-1 overflow-y-auto px-6 py-5 space-y-6"
+            >
+              {/* Live preview of the public page header */}
+              <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/40">
+                <div className="relative h-28 sm:h-32 bg-gradient-to-r from-zinc-900 to-black">
+                  {pcBannerUrl.trim() && (
+                    <img src={pcBannerUrl.trim()} alt="" className="w-full h-full object-cover" />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                </div>
+                <div className="relative px-4 pb-4 -mt-8 flex items-end gap-3">
+                  <div className="w-16 h-16 rounded-xl overflow-hidden border-2 border-surface bg-zinc-900 flex-shrink-0">
+                    {logoUrl.trim() ? (
+                      <img src={logoUrl.trim()} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center font-black text-white text-xl" style={{ backgroundColor: previewTheme.primary }}>
+                        {(studioName || 'S').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 pb-1">
+                    <p className="font-display font-bold text-white truncate">{studioName || 'Studio name'}</p>
+                    <p className="text-xs text-zinc-400 truncate">{studioLocation || 'Location'}</p>
+                  </div>
+                </div>
               </div>
 
-              {/* 2. STUDIO LOCATION FIELD */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-zinc-200 flex items-center justify-between text-xs">
-                  <span className="flex items-center space-x-1.5">
-                    <MapPin className="w-4 h-4 text-[#E50914]" />
-                    <span>2. Studio Location / Oor</span>
-                  </span>
-                  <span className="text-[10px] text-zinc-400">Type or select below</span>
-                </label>
-                <input
-                  type="text"
-                  value={studioLocation}
-                  onChange={(e) => setStudioLocation(e.target.value)}
-                  placeholder="e.g. Chennai, Coimbatore, Madurai, Bengaluru..."
-                  className="w-full px-4 py-2.5 bg-black/60 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-red-400"
-                />
-                <div className="space-y-1 pt-1">
-                  <span className="text-[10px] text-zinc-400 block font-medium">Quick Select Popular Cities:</span>
-                  <div className="flex flex-wrap gap-1.5">
+              {/* Studio details */}
+              <section className="space-y-4">
+                <h4 className="font-bold text-white text-sm">Studio details</h4>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-300 flex items-center justify-between">
+                    <span>Studio name</span>
+                    <span className="text-[11px] text-zinc-500 font-normal">{studioName.length}/40</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={40}
+                    value={studioName}
+                    onChange={(e) => setStudioName(e.target.value)}
+                    placeholder="e.g. Matrix Tamil"
+                    className="w-full px-3.5 py-2.5 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-brand"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-brand" />
+                    <span>Location</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={studioLocation}
+                    onChange={(e) => setStudioLocation(e.target.value)}
+                    placeholder="City or country"
+                    className="w-full px-3.5 py-2.5 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-brand"
+                  />
+                  <div className="flex flex-wrap gap-1.5 pt-1">
                     {POPULAR_LOCATIONS.map((city) => (
                       <button
                         type="button"
                         key={city}
                         onClick={() => setStudioLocation(city)}
-                        className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all cursor-pointer ${
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
                           studioLocation.toLowerCase() === city.toLowerCase()
-                            ? 'bg-[#E50914] text-white shadow-sm'
+                            ? 'bg-brand text-white'
                             : 'bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/10'
                         }`}
                       >
@@ -1663,151 +1850,61 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                     ))}
                   </div>
                 </div>
-              </div>
 
-              {/* 3. STUDIO LOGO / AVATAR */}
-              <div className="space-y-2">
-                <label className="font-bold text-zinc-200 flex items-center justify-between text-xs">
-                  <span>3. Studio Logo / Avatar (Square)</span>
-                  <span className="text-[10px] text-emerald-400 font-bold">Square 1:1</span>
-                </label>
-                <div className="p-3.5 rounded-2xl bg-black/60 border border-white/15 flex items-center justify-between gap-3">
-                  <div className="flex items-center space-x-3 min-w-0">
-                    <div className="w-14 h-14 rounded-2xl overflow-hidden border border-white/20 bg-zinc-900 flex-shrink-0">
-                      {logoUrl && logoUrl.trim() !== '' ? (
-                        <img src={logoUrl.trim()} alt="Logo" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-500 to-teal-700 text-white font-bold text-lg">
-                          {(studioName || 'S').charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-white truncate">
-                        {logoUrl && logoUrl.trim() !== '' ? 'Studio Logo Set' : 'No Logo Uploaded'}
-                      </p>
-                      <p className="text-[10px] text-zinc-400">
-                        Square avatar for navigation bar & player watermarks.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => logoFileInputRef.current?.click()}
-                    className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs cursor-pointer flex-shrink-0"
-                  >
-                    Select Logo
-                  </button>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-zinc-300 flex items-center justify-between">
+                    <span>About your studio</span>
+                    <span className="text-[11px] text-zinc-500 font-normal">{studioBio.length}/300</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    maxLength={300}
+                    value={studioBio}
+                    onChange={(e) => setStudioBio(e.target.value)}
+                    placeholder="Your crew, voice actors and upcoming releases"
+                    className="w-full px-3.5 py-2.5 bg-black/50 border border-white/15 rounded-xl text-white text-sm focus:outline-none focus:border-brand"
+                  />
                 </div>
-              </div>
+              </section>
 
-              {/* 4. DUAL-BANNER SPECIFICATIONS (PC Banner + Mobile Banner) */}
-              <div className="space-y-3 pt-2 border-t border-white/10">
+              {/* Images */}
+              <section className="space-y-3">
                 <div>
-                  <h4 className="font-bold text-white text-xs flex items-center space-x-1.5">
-                    <ImageIcon className="w-4 h-4 text-emerald-400" />
-                    <span>4. Dual Banner Uploads (PC & Mobile Optimized)</span>
-                  </h4>
-                  <p className="text-[11px] text-zinc-400">
-                    Upload a widescreen 16:9 banner for desktop/laptop displays, and a compact banner for mobile devices separately.
-                  </p>
+                  <h4 className="font-bold text-white text-sm">Images</h4>
+                  <p className="text-[11px] text-zinc-400">Upload from your device or paste an image link.</p>
                 </div>
+                <ImageRow
+                  label="Logo"
+                  hint="Square (1:1). Used in the menu and on your page."
+                  value={logoUrl}
+                  onChange={setLogoUrl}
+                  onUpload={() => logoFileInputRef.current?.click()}
+                  previewClass="w-16 h-16"
+                />
+                <ImageRow
+                  label="PC banner"
+                  hint="Widescreen (16:9) for laptops and desktops."
+                  value={pcBannerUrl}
+                  onChange={setPcBannerUrl}
+                  onUpload={() => pcBannerFileInputRef.current?.click()}
+                  previewClass="w-28 aspect-video"
+                />
+                <ImageRow
+                  label="Mobile banner"
+                  hint="Compact (4:5) for phones."
+                  value={mobileBannerUrl}
+                  onChange={setMobileBannerUrl}
+                  onUpload={() => mobileBannerFileInputRef.current?.click()}
+                  previewClass="w-16 aspect-[4/5]"
+                />
+              </section>
 
-                {/* A) PC Banner (16:9 Widescreen) */}
-                <div className="p-3.5 rounded-2xl bg-black/60 border border-white/15 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-zinc-200 text-xs flex items-center space-x-1.5">
-                      <Monitor className="w-4 h-4 text-cyan-400" />
-                      <span>a) PC Banner (Optimized Wide Screen 16:9 Layout)</span>
-                    </span>
-                    <span className="px-2 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 text-[10px] font-bold">
-                      Desktop 16:9
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-zinc-400">
-                    Widescreen cinematic cover banner for laptops, desktops, and large displays.
-                  </p>
-
-                  <div className="flex items-center space-x-3 pt-1">
-                    <div className="w-24 h-14 rounded-xl overflow-hidden border border-white/20 bg-zinc-900 flex-shrink-0">
-                      {pcBannerUrl && pcBannerUrl.trim() !== '' ? (
-                        <img src={pcBannerUrl.trim()} alt="PC Banner" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500">
-                          No 16:9 Banner
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                      <input
-                        type="text"
-                        value={pcBannerUrl}
-                        onChange={(e) => setPcBannerUrl(e.target.value)}
-                        placeholder="PC Banner image link or choose gallery below..."
-                        className="w-full px-3 py-1.5 bg-black/40 border border-white/10 rounded-lg text-white text-xs focus:outline-none focus:border-cyan-400"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => pcBannerFileInputRef.current?.click()}
-                        className="px-3 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-bold rounded-lg text-[10px] cursor-pointer"
-                      >
-                        Choose PC Banner from Gallery
-                      </button>
-                    </div>
-                  </div>
+              {/* Theme */}
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-white text-sm">Theme colour</h4>
+                  <span className="text-[11px] text-zinc-400">{previewTheme.name}</span>
                 </div>
-
-                {/* B) Mobile Banner (Compact / Vertical layout) */}
-                <div className="p-3.5 rounded-2xl bg-black/60 border border-white/15 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-zinc-200 text-xs flex items-center space-x-1.5">
-                      <Smartphone className="w-4 h-4 text-emerald-400" />
-                      <span>b) Mobile Banner (Optimized Compact / Phone Layout)</span>
-                    </span>
-                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 text-[10px] font-bold">
-                      Mobile Screen
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-zinc-400">
-                    Optimized compact layout tailored for smartphone screens without being clipped.
-                  </p>
-
-                  <div className="flex items-center space-x-3 pt-1">
-                    <div className="w-16 h-16 rounded-xl overflow-hidden border border-white/20 bg-zinc-900 flex-shrink-0">
-                      {mobileBannerUrl && mobileBannerUrl.trim() !== '' ? (
-                        <img src={mobileBannerUrl.trim()} alt="Mobile Banner" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500 text-center p-1">
-                          No Mobile Banner
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 space-y-1.5">
-                      <input
-                        type="text"
-                        value={mobileBannerUrl}
-                        onChange={(e) => setMobileBannerUrl(e.target.value)}
-                        placeholder="Mobile Banner link or select below..."
-                        className="w-full px-3 py-1.5 bg-black/40 border border-white/10 rounded-lg text-white text-xs focus:outline-none focus:border-emerald-400"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => mobileBannerFileInputRef.current?.click()}
-                        className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold rounded-lg text-[10px] cursor-pointer"
-                      >
-                        Choose Mobile Banner from Gallery
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 5. VISUAL THEME ACCENT */}
-              <div className="space-y-2">
-                <label className="font-bold text-zinc-200 flex items-center justify-between text-xs">
-                  <span>5. Studio Profile Theme Accent</span>
-                  <span className="text-[10px] text-zinc-400">{previewTheme.name}</span>
-                </label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {STUDIO_THEMES.map((theme) => {
                     const isSelected = studioTheme === theme.id;
@@ -1816,13 +1913,10 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                         type="button"
                         key={theme.id}
                         onClick={() => setStudioTheme(theme.id)}
-                        className={`p-2.5 rounded-xl border text-left transition-all flex items-center space-x-2.5 cursor-pointer ${
-                          isSelected ? 'border-white/40 shadow-lg' : 'border-white/10 bg-black/40'
+                        className={`h-11 px-3 rounded-xl border text-left transition-colors flex items-center gap-2.5 cursor-pointer ${
+                          isSelected ? 'bg-white/10' : 'border-white/10 bg-black/30 hover:bg-white/5'
                         }`}
-                        style={{
-                          backgroundColor: isSelected ? `${theme.primary}18` : undefined,
-                          borderColor: isSelected ? theme.primary : undefined
-                        }}
+                        style={{ borderColor: isSelected ? theme.primary : undefined }}
                       >
                         <span
                           className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center"
@@ -1835,71 +1929,45 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                     );
                   })}
                 </div>
-              </div>
+              </section>
 
-              {/* 6. STUDIO BIO */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-zinc-200 flex items-center justify-between text-xs">
-                  <span>6. Studio Bio / Philosophy</span>
-                  <span className="text-[10px] text-zinc-500 font-mono">{studioBio.length}/300</span>
-                </label>
-                <textarea
-                  rows={2}
-                  maxLength={300}
-                  value={studioBio}
-                  onChange={(e) => setStudioBio(e.target.value)}
-                  placeholder="Write about your fandub crew details, voice actors, upcoming releases, and milestones..."
-                  className="w-full px-4 py-2 bg-black/60 border border-white/15 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-400"
-                />
-              </div>
-
-              {/* DANGER ZONE: DELETE STUDIO OPTION */}
-              <div className="p-3.5 rounded-2xl bg-red-950/20 border border-red-500/30 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h5 className="font-bold text-red-300 text-xs flex items-center space-x-1">
-                      <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
-                      <span>Studio Deletion (Danger Zone)</span>
-                    </h5>
-                    <p className="text-[10px] text-zinc-400">
-                      Permanently delete your studio profile and all associated anime folders.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsDeleteStudioModalOpen(true);
-                    }}
-                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-md transition-all active:scale-95"
-                  >
-                    Delete Studio
-                  </button>
+              {/* Danger zone */}
+              <section className="flex items-center justify-between gap-3 p-3.5 rounded-2xl border border-red-500/30 bg-red-950/20">
+                <div className="min-w-0">
+                  <h5 className="font-bold text-red-300 text-sm flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4" /> Delete studio
+                  </h5>
+                  <p className="text-[11px] text-zinc-400">Removes your studio and every folder in it. This cannot be undone.</p>
                 </div>
-              </div>
-
-              {/* Sticky Footer inside Form */}
-              <div className="pt-3 border-t border-white/10 flex items-center justify-end space-x-2">
                 <button
                   type="button"
-                  onClick={() => setIsProfileModalOpen(false)}
-                  className="px-4 py-2 bg-white/5 hover:bg-white/10 text-zinc-300 font-bold rounded-xl text-xs cursor-pointer"
+                  onClick={() => setIsDeleteStudioModalOpen(true)}
+                  className="h-9 px-4 flex-shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs cursor-pointer"
                 >
-                  Cancel
+                  Delete
                 </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-6 py-2 text-black font-extrabold rounded-xl shadow-lg transition-all text-xs cursor-pointer flex items-center space-x-1.5"
-                  style={{
-                    backgroundColor: previewTheme.primary,
-                    boxShadow: `0 0 20px ${previewTheme.glowRgba}`
-                  }}
-                >
-                  <Check className="w-4 h-4 stroke-[3]" />
-                  <span>Save Studio Changes</span>
-                </button>
-              </div>
+              </section>
             </form>
+
+            <footer className="flex items-center justify-end gap-2 px-6 py-4 border-t border-white/10 flex-shrink-0 bg-surface">
+              <button
+                type="button"
+                onClick={() => setIsProfileModalOpen(false)}
+                className="h-10 px-5 bg-white/5 hover:bg-white/10 text-zinc-200 font-bold rounded-xl text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="studio-profile-form"
+                disabled={loading}
+                className="h-10 px-6 text-black font-extrabold rounded-xl text-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-60"
+                style={{ backgroundColor: previewTheme.primary }}
+              >
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>Save changes</span>
+              </button>
+            </footer>
           </div>
         </div>
       )}
@@ -1968,6 +2036,14 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                 botUrl={singleEpBotUrl}
                 onDriveChange={setSingleEpVideoUrl}
                 onBotChange={setSingleEpBotUrl}
+                invalid={showSingleErrors}
+              />
+
+              <ThumbnailField
+                value={singleEpThumb}
+                onChange={setSingleEpThumb}
+                invalid={showSingleErrors && !editingEpisodeId}
+                noun={selectedAnimeForEpisode.type === 'Movie' ? 'Movie' : 'Episode'}
               />
 
               <div className="flex justify-end space-x-2 pt-2 border-t border-white/10">
@@ -2165,6 +2241,15 @@ export const StudioDashboard: React.FC<StudioDashboardProps> = ({
                   onChange={(e) => setFolderSynopsis(e.target.value)}
                   className="w-full px-3.5 py-2 bg-black/50 border border-white/15 rounded-xl text-white text-xs focus:outline-none focus:border-[#E50914]"
                 />
+              </div>
+
+              {/* Voice cast */}
+              <div className="space-y-3 pt-2 border-t border-white/10">
+                <div>
+                  <span className="font-bold text-white text-xs block">Voice Cast</span>
+                  <p className="text-[11px] text-zinc-400">Shown on the anime page above the rating.</p>
+                </div>
+                <CastEditor cast={editCast} onChange={setEditCast} />
               </div>
 
               {/* Action buttons including Delete Folder */}

@@ -1,5 +1,6 @@
 import React from 'react';
-import { CheckCircle2, Clapperboard, X, Check, Trash2, Send } from 'lucide-react';
+import { CheckCircle2, Clapperboard, X, Check, Trash2, Send, ImageIcon } from 'lucide-react';
+import { compressImage } from '../utils/image';
 import { getGoogleDriveStreamInfo } from '../firebase';
 import { Trailer } from '../types';
 
@@ -19,12 +20,15 @@ interface StreamLinkFieldsProps {
   botUrl: string;
   onDriveChange: (v: string) => void;
   onBotChange: (v: string) => void;
+  /** Marks both boxes red (used when the form is sent without any link). */
+  invalid?: boolean;
 }
 
-export const StreamLinkFields: React.FC<StreamLinkFieldsProps> = ({ driveUrl, botUrl, onDriveChange, onBotChange }) => {
+export const StreamLinkFields: React.FC<StreamLinkFieldsProps> = ({ driveUrl, botUrl, onDriveChange, onBotChange, invalid }) => {
   const hasDrive = driveUrl.trim().length > 0;
   const hasBot = botUrl.trim().length > 0;
   const driveOk = getGoogleDriveStreamInfo(driveUrl).isDrive;
+  const redBox = invalid && !hasDrive && !hasBot ? ' !border-red-500' : '';
 
   return (
     <div className="space-y-3">
@@ -45,7 +49,7 @@ export const StreamLinkFields: React.FC<StreamLinkFieldsProps> = ({ driveUrl, bo
           value={botUrl}
           onChange={(e) => onBotChange(e.target.value)}
           placeholder={`Paste the link @${BOT_USERNAME} sent you`}
-          className={inputCls}
+          className={inputCls + redBox}
         />
         <p className="text-[11px] text-zinc-400">
           Send your video to <strong className="text-zinc-200">@{BOT_USERNAME}</strong> on Telegram. It replies with a link, paste that link here.
@@ -61,7 +65,7 @@ export const StreamLinkFields: React.FC<StreamLinkFieldsProps> = ({ driveUrl, bo
           value={driveUrl}
           onChange={(e) => onDriveChange(e.target.value)}
           placeholder="https://drive.google.com/file/d/.../view"
-          className={inputCls}
+          className={inputCls + redBox}
         />
         {driveOk && (
           <p className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold">
@@ -70,7 +74,7 @@ export const StreamLinkFields: React.FC<StreamLinkFieldsProps> = ({ driveUrl, bo
         )}
       </div>
 
-      <p className="text-[11px] text-zinc-400">
+      <p className={`text-[11px] text-zinc-400 ${invalid && !hasDrive && !hasBot ? 'hidden' : ''}`}>
         {hasDrive && hasBot
           ? 'Viewers will see: Server 1 (Bot) + Server 2 (Drive)'
           : hasBot
@@ -79,6 +83,81 @@ export const StreamLinkFields: React.FC<StreamLinkFieldsProps> = ({ driveUrl, bo
           ? 'Viewers will see: Server 1 (Drive)'
           : 'Add at least one link'}
       </p>
+      {invalid && !hasDrive && !hasBot && (
+        <p className="text-[11px] font-bold text-red-400">Add at least one link: the Bot link or the Drive link.</p>
+      )}
+    </div>
+  );
+};
+
+// -------------------------------------------------------------
+// Thumbnail for ONE video (an episode or a movie), not for the folder
+// -------------------------------------------------------------
+interface ThumbnailFieldProps {
+  value: string;
+  onChange: (v: string) => void;
+  /** Shows the box in red (used when the form is submitted without a thumbnail). */
+  invalid?: boolean;
+  noun?: string; // 'Movie' or 'Episode'
+}
+
+export const ThumbnailField: React.FC<ThumbnailFieldProps> = ({ value, onChange, invalid, noun = 'video' }) => {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  const pick = async (file?: File) => {
+    if (!file) return;
+    setErr(null);
+    try {
+      // small on purpose: every thumbnail is stored inside the folder document
+      onChange(await compressImage(file, 640, 360, 0.78));
+    } catch (e: any) {
+      setErr(e.message || 'Could not use that image.');
+    }
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <label className={`${labelCls} flex items-center gap-1.5`}>
+        <ImageIcon className="w-3.5 h-3.5 text-brand" />
+        <span>Upload Your Thumbnail</span>
+        <span className="text-zinc-500 font-normal">(for this {noun.toLowerCase()})</span>
+      </label>
+      <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
+      <div
+        className={`flex items-center gap-3 p-3 rounded-2xl bg-black/50 border transition-colors ${
+          invalid && !value ? 'border-red-500 bg-red-500/5' : 'border-white/15'
+        }`}
+      >
+        <div className="w-28 aspect-video rounded-lg overflow-hidden border border-white/15 bg-zinc-900 flex-shrink-0">
+          {value ? (
+            <img src={value} alt="Thumbnail preview" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[10px] text-zinc-500">16:9</div>
+          )}
+        </div>
+        <div className="min-w-0 space-y-1.5">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="px-3.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold cursor-pointer"
+          >
+            {value ? 'Change thumbnail' : 'Choose thumbnail'}
+          </button>
+          {value && (
+            <button
+              type="button"
+              onClick={() => onChange('')}
+              className="ml-2 text-[11px] text-zinc-400 hover:text-red-300 cursor-pointer"
+            >
+              Remove
+            </button>
+          )}
+          <p className="text-[11px] text-zinc-400">Shown on this {noun.toLowerCase()}'s card, not on the folder.</p>
+        </div>
+      </div>
+      {invalid && !value && <p className="text-[11px] font-bold text-red-400">Thumbnail is required.</p>}
+      {err && <p className="text-[11px] font-bold text-red-400">{err}</p>}
     </div>
   );
 };
