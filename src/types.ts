@@ -19,6 +19,14 @@ export interface Trailer {
   botStreamUrl?: string; // Telegram bot stream link
 }
 
+export type ContentCategory =
+  | 'Movies'
+  | 'Series'
+  | 'Anime Series'
+  | 'Anime Movies'
+  | 'K-Drama'
+  | 'K-Drama Movies';
+
 export type AnimeType = 'Series' | 'Movie' | 'TV Series' | 'OVA';
 
 export interface StudioSession {
@@ -68,6 +76,7 @@ export interface Anime {
   studioId: string;
   studioName: string;
   type: AnimeType;
+  category?: ContentCategory;
   poster: string;
   banner: string;
   rating: string;
