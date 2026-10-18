@@ -36,3 +36,11 @@ export function formatJoinDate(createdAt?: string | null): string | null {
     hour12: true
   });
 }
+
+/** Public pages show only the day, e.g. "12 Oct 2026". Returns null when the date is unknown. */
+export function formatJoinDateOnly(createdAt?: string | null): string | null {
+  if (!createdAt) return null;
+  const d = new Date(createdAt);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
