@@ -12,7 +12,8 @@ import {
 } from 'firebase/firestore';
 import { signInWithPopup, onAuthStateChanged } from 'firebase/auth';
 import { db, auth, googleProvider, MAX_STUDIO_CAPACITY, MASTER_OWNER_CREDENTIALS, getGoogleDriveStreamInfo } from '../firebase';
-import { Anime, Studio, Trailer } from '../types';
+import { Anime, Studio, Trailer, CastMember } from '../types';
+import { cleanCast } from '../utils/cast';
 import {
   getStoredAnime,
   saveStoredAnime,
@@ -71,6 +72,7 @@ export interface CloudAnime {
   trending?: boolean;
   topTenRank?: number;
   trailer?: Trailer | null;
+  cast?: CastMember[];
 }
 
 // -------------------------------------------------------------
@@ -87,6 +89,17 @@ function cleanForFirestore<T>(value: T): T {
 function toPublicStudio(studio: Record<string, any>): Record<string, any> {
   const { password, googleEmail, ...rest } = studio;
   return cleanForFirestore(rest);
+}
+
+// Keeps the first entry of every id. Two copies of the same folder happened when the live
+// Firestore listener and the create call both added it to the cache.
+function dedupeById<T extends { id: string }>(list: T[]): T[] {
+  const seen = new Set<string>();
+  return list.filter((x) => {
+    if (seen.has(x.id)) return false;
+    seen.add(x.id);
+    return true;
+  });
 }
 
 // Turns a Firestore error into a message the studio can actually read.
@@ -177,6 +190,7 @@ function initCachesFromStorage() {
         featured: !!a.featured,
         trending: !!a.trending,
         trailer: a.trailer,
+        cast: a.cast,
         topTenRank: a.topTenRank
       }));
     }
@@ -186,8 +200,12 @@ function initCachesFromStorage() {
 }
 
 initCachesFromStorage();
+memoryAnimeCache = dedupeById(memoryAnimeCache);
+memoryStudiosCache = dedupeById(memoryStudiosCache);
 
 function syncCachesToStorage() {
+  memoryAnimeCache = dedupeById(memoryAnimeCache);
+  memoryStudiosCache = dedupeById(memoryStudiosCache);
   try {
     const mappedStudios: Studio[] = memoryStudiosCache.map((cs) => {
       const resolvedLocation = (cs.location && cs.location.trim()) ? cs.location.trim() : 'International';
@@ -238,7 +256,8 @@ function syncCachesToStorage() {
       seasons: 1,
       episodesCount: (ca.episodes || []).length,
       createdAt: ca.createdAt,
-      trailer: ca.trailer || undefined
+      trailer: ca.trailer || undefined,
+      cast: ca.cast
     }));
     saveStoredAnime(mappedAnime);
 
@@ -408,7 +427,8 @@ export function subscribeToAnime(
               featured: !!data.featured,
               trending: !!data.trending,
               topTenRank: data.topTenRank,
-              trailer: data.trailer || undefined
+              trailer: data.trailer || undefined,
+              cast: Array.isArray(data.cast) ? data.cast : undefined
             });
           });
 
@@ -900,8 +920,10 @@ export async function createAnimeFolder(
       videoUrl?: string; // Drive link
       botStreamUrl?: string; // Telegram bot stream link
       duration?: string;
+      thumbnail?: string; // thumbnail of this video
     };
     trailer?: Trailer | null; // optional - can also be added later
+    cast?: CastMember[]; // optional voice cast
   },
   studioId: string,
   studioName: string
@@ -925,7 +947,7 @@ export async function createAnimeFolder(
       videoUrl: rawUrl,
       botStreamUrl: botUrl,
       duration: animeData.initialEpisode.duration?.trim() || (animeData.type === 'Movie' ? '1h 45m' : '24m'),
-      thumbnail: driveInfo.thumbnailUrl || animeData.poster.trim() || '',
+      thumbnail: animeData.initialEpisode.thumbnail?.trim() || driveInfo.thumbnailUrl || animeData.poster.trim() || '',
       releaseDate: now
     });
   }
@@ -947,7 +969,8 @@ export async function createAnimeFolder(
     createdAt: now,
     featured: false,
     trending: true,
-    trailer: normalizeTrailer(animeData.trailer)
+    trailer: normalizeTrailer(animeData.trailer),
+    cast: cleanCast(animeData.cast)
   };
 
   // 1. Save to Firestore FIRST. If it fails the studio sees the real reason,
@@ -959,8 +982,11 @@ export async function createAnimeFolder(
     throw cloudSaveError(err, 'anime create');
   }
 
-  // 2. Then update the live caches and persistent storage
-  memoryAnimeCache.unshift(newAnime);
+  // 2. Then update the live caches. The Firestore listener may already have added this folder
+  //    (it fires as soon as the write starts), so replace instead of adding a second copy.
+  const alreadyIdx = memoryAnimeCache.findIndex((a) => a.id === animeId);
+  if (alreadyIdx !== -1) memoryAnimeCache[alreadyIdx] = newAnime;
+  else memoryAnimeCache.unshift(newAnime);
 
   // Increment studio anime count in cache
   const studioIdx = memoryStudiosCache.findIndex((s) => s.id === studioId);
@@ -1012,10 +1038,10 @@ export async function updateAnimeFolder(
     throw cloudSaveError(err, 'anime update');
   }
 
-  memoryAnimeCache[animeIdx] = {
-    ...currentAnime,
-    ...updateData
-  };
+  const idxNow = memoryAnimeCache.findIndex((a) => a.id === animeId);
+  if (idxNow !== -1) {
+    memoryAnimeCache[idxNow] = { ...memoryAnimeCache[idxNow], ...updateData };
+  }
 
   syncCachesToStorage();
   notifyDataChanged();
@@ -1076,6 +1102,7 @@ export async function addEpisodeToAnime(
     videoUrl?: string; // Drive link
     botStreamUrl?: string; // Telegram bot stream link
     duration?: string;
+    thumbnail?: string; // thumbnail of this video
   },
   currentStudioId: string,
   isMasterOwner: boolean
@@ -1108,7 +1135,7 @@ export async function addEpisodeToAnime(
     videoUrl: rawUrl,
     botStreamUrl: (episodeData.botStreamUrl || '').trim(),
     duration: episodeData.duration || '24m',
-    thumbnail: driveInfo.thumbnailUrl || currentAnime.poster || '',
+    thumbnail: episodeData.thumbnail?.trim() || driveInfo.thumbnailUrl || currentAnime.poster || '',
     releaseDate: new Date().toISOString()
   };
 
@@ -1126,7 +1153,8 @@ export async function addEpisodeToAnime(
     throw cloudSaveError(err, 'episode add');
   }
 
-  memoryAnimeCache[animeIdx].episodes = updatedEpisodes;
+  const idxAfterAdd = memoryAnimeCache.findIndex((a) => a.id === animeId);
+  if (idxAfterAdd !== -1) memoryAnimeCache[idxAfterAdd].episodes = updatedEpisodes;
 
   syncCachesToStorage();
   notifyDataChanged();
@@ -1142,6 +1170,7 @@ export async function updateEpisodeInAnime(
     videoUrl?: string; // Drive link
     botStreamUrl?: string; // Bot link
     duration?: string;
+    thumbnail?: string; // new thumbnail (empty keeps the current one)
   },
   currentStudioId: string,
   isMasterOwner: boolean
@@ -1178,7 +1207,7 @@ export async function updateEpisodeInAnime(
             videoUrl: rawUrl,
             botStreamUrl: (episodeData.botStreamUrl || '').trim(),
             duration: episodeData.duration || ep.duration || '24m',
-            thumbnail: ep.thumbnail || driveInfo.thumbnailUrl || currentAnime.poster || ''
+            thumbnail: episodeData.thumbnail?.trim() || ep.thumbnail || driveInfo.thumbnailUrl || currentAnime.poster || ''
           }
     )
     .sort((a, b) => a.number - b.number);
@@ -1193,7 +1222,8 @@ export async function updateEpisodeInAnime(
     throw cloudSaveError(err, 'episode update');
   }
 
-  memoryAnimeCache[animeIdx].episodes = updatedEpisodes;
+  const idxAfterEdit = memoryAnimeCache.findIndex((a) => a.id === animeId);
+  if (idxAfterEdit !== -1) memoryAnimeCache[idxAfterEdit].episodes = updatedEpisodes;
   syncCachesToStorage();
   notifyDataChanged();
 }
@@ -1230,7 +1260,8 @@ export async function setAnimeTrailer(
     );
   }
 
-  memoryAnimeCache[animeIdx] = { ...currentAnime, trailer: clean };
+  const idxAfterTrailer = memoryAnimeCache.findIndex((a) => a.id === animeId);
+  if (idxAfterTrailer !== -1) memoryAnimeCache[idxAfterTrailer] = { ...memoryAnimeCache[idxAfterTrailer], trailer: clean };
   syncCachesToStorage();
   notifyDataChanged();
 }
@@ -1272,7 +1303,8 @@ export async function deleteEpisodeFromAnime(
     );
   }
 
-  memoryAnimeCache[animeIdx].episodes = updatedEpisodes;
+  const idxAfterDelete = memoryAnimeCache.findIndex((a) => a.id === animeId);
+  if (idxAfterDelete !== -1) memoryAnimeCache[idxAfterDelete].episodes = updatedEpisodes;
 
   syncCachesToStorage();
   notifyDataChanged();
