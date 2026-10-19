@@ -426,11 +426,11 @@ export default function App() {
         )}
 
         {activeTab === 'movies' && (
-          <CatalogPage title="Movies" items={itemsIn(['Movies'])} onSelectAnime={setDetailAnime} onPlayAnime={handlePlayAnime} />
+          <CatalogPage title="Movies" items={itemsIn(['Movies', 'Anime Movies', 'K-Drama Movies'])} onSelectAnime={setDetailAnime} onPlayAnime={handlePlayAnime} />
         )}
 
         {activeTab === 'series' && (
-          <CatalogPage title="Series" items={itemsIn(['Series'])} onSelectAnime={setDetailAnime} onPlayAnime={handlePlayAnime} />
+          <CatalogPage title="Series" items={itemsIn(['Series', 'Anime Series', 'K-Drama'])} onSelectAnime={setDetailAnime} onPlayAnime={handlePlayAnime} />
         )}
 
         {activeTab === 'anime' && (
