@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+/* ZANFT design tokens
+   ink      - page background, a violet-tinted black (like a darkened cinema)
+   surface  - cards and panels, two steps up from ink
+   brand    - the katana red from the logo, used for the one primary action on screen
+   amber    - film-leader amber, used only for scores and timecodes */
+@theme {
+  --color-ink: #0b0a16;
+  --color-ink-deep: #07060f;
+  --color-surface: #131222;
+  --color-surface-raised: #1b1a2e;
+  --color-line: rgba(255, 255, 255, 0.09);
+  --color-brand: #f23645;
+  --color-brand-deep: #b3121f;
+  --color-amber: #ffb84d;
+
+  /* Crunchyroll uses Lato for everything: titles, body and numbers */
+  --font-display: "Lato", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Lato", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Lato", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Tailwind v4 has no xs breakpoint by default; the app uses xs: in many places */
+  --breakpoint-xs: 30rem;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-ink);
+    scroll-padding-top: 6rem;
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: #f1f0f7;
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--color-brand);
+    color: #fff;
+  }
+
+  h1, h2, h3, h4, h5, h6, button, input, select, textarea {
+    font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:not(:disabled),
+  [role="button"] {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-ink-deep); }
+::-webkit-scrollbar-thumb { background: #2a2942; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-brand); }
+
+.glass-panel {
+  background: rgba(19, 18, 34, 0.78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--color-line);
+}
+
+/* Poster frame: crop marks in the corners, the one signature detail of the catalogue.
+   They stay hidden until the card is hovered or focused, then slide in. */
+.poster-frame { position: relative; }
+.poster-frame::before,
+.poster-frame::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.2s ease, inset 0.2s ease;
+  --mark: 14px;
+  --stroke: 2px;
+  background:
+    linear-gradient(var(--color-brand), var(--color-brand)) top left / var(--mark) var(--stroke) no-repeat,
+    linear-gradient(var(--color-brand), var(--color-brand)) top left / var(--stroke) var(--mark) no-repeat,
+    linear-gradient(var(--color-brand), var(--color-brand)) bottom right / var(--mark) var(--stroke) no-repeat,
+    linear-gradient(var(--color-brand), var(--color-brand)) bottom right / var(--stroke) var(--mark) no-repeat;
+}
+.poster-frame::after {
+  background:
+    linear-gradient(var(--color-brand), var(--color-brand)) top right / var(--mark) var(--stroke) no-repeat,
+    linear-gradient(var(--color-brand), var(--color-brand)) top right / var(--stroke) var(--mark) no-repeat,
+    linear-gradient(var(--color-brand), var(--color-brand)) bottom left / var(--mark) var(--stroke) no-repeat,
+    linear-gradient(var(--color-brand), var(--color-brand)) bottom left / var(--stroke) var(--mark) no-repeat;
+}
+.group:hover .poster-frame::before,
+.group:hover .poster-frame::after,
+.group:focus-visible .poster-frame::before,
+.group:focus-visible .poster-frame::after {
+  opacity: 1;
+  inset: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
