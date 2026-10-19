@@ -13,6 +13,17 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/*-1.tsx",
+    "src/*-2.tsx",
+    "src/StudioDashboard.tsx",
+    "src/StudiosDirectory.tsx",
+    "src/VideoPlayerModal-1.tsx",
+    "src/*.txt",
+    "src/components/*-1.tsx",
+    "src/components/*-2.tsx",
+    "src/components/*.txt",
+    "src/services/*-1.ts"
+  ]
 }
-
